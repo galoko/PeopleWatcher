@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 
 final class EngineManager {
 
-    // huita
     static public native void initialize(String sdCardPath);
 
     static public native void startRecord(long timestamp);

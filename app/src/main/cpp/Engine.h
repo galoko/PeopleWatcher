@@ -2,8 +2,15 @@
 #define PEOPLEWATCHER_ENGINE_H
 
 #include <string>
-#include <string>
 #include <inttypes.h>
+
+#include "readerwriterqueue.h"
+
+extern "C" {
+#include "libavutil/frame.h"
+}
+
+using namespace moodycamel;
 
 class Engine
 {
@@ -16,17 +23,20 @@ public:
     }
 private:
 
+    int initialized;
+
     std::string sdCardPath;
+
+    ReaderWriterQueue<AVFrame*> frames;
 
     Engine() {}
 
-    void dumpBMP24(uint8_t* pixels, int width, int height, char* fileName);
-    void dumpBMP8(uint8_t* pixels, int width, int height, char* fileName);
+    void addFrameQueue(AVFrame* frame);
 public:
     Engine(Engine const&)          = delete;
     void operator=(Engine const&)  = delete;
 
-    void initialize(const char* sdCardPath);
+    void initialize(const char* sdCardPathStr);
     void startRecord(long long timestamp);
     void sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                    int strideY, int strideU, int strideV, long long timestamp);

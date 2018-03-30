@@ -108,7 +108,7 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
-            throw new Error("Capture session failed: " + (int) failure.getReason());
+            throw new Error("Capture session failed: " + failure.getReason());
         }
 
         @Override

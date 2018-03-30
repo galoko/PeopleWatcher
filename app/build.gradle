@@ -1,6 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+        config {
+            keyAlias 'key0'
+            keyPassword '3Y4qVBoQqXg4iMYn'
+            storeFile file('/home/gal/Projects/PeopleWatcher/Key.jks')
+            storePassword '3Y4qVBoQqXg4iMYn'
+        }
+    }
     compileSdkVersion 27
     buildToolsVersion "27.0.3"
     defaultConfig {
@@ -16,14 +24,22 @@ android {
                 arguments "-DANDROID_PLATFORM=android-23"
             }
         }
-        ndk{
+        ndk {
             abiFilters "armeabi-v7a"
         }
     }
     buildTypes {
+        debug {
+            minifyEnabled false
+            debuggable true
+            jniDebuggable true
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            debuggable true
+            jniDebuggable true
+            signingConfig signingConfigs.config
         }
     }
     externalNativeBuild {
@@ -34,13 +50,13 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'com.android.support.constraint:constraint-layout:1.0.2'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
-    implementation "com.android.support:support-v4:27.1.0"
-    implementation "com.android.support:support-v13:27.1.0"
-    implementation "com.android.support:cardview-v7:27.1.0"
-    implementation "com.android.support:appcompat-v7:27.1.0"
+    implementation 'com.android.support:support-v4:27.1.0'
+    implementation 'com.android.support:support-v13:27.1.0'
+    implementation 'com.android.support:cardview-v7:27.1.0'
+    implementation 'com.android.support:appcompat-v7:27.1.0'
 }

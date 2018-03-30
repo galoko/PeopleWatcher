@@ -8,7 +8,7 @@
 #include "Engine.h"
 
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_initialize(
-        JNIEnv *env, jclass /*this*/, jstring sdCardPath) {
+        JNIEnv *env, jobject /*this*/, jstring sdCardPath) {
 
     try {
         COFFEE_TRY() {
@@ -28,7 +28,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_startRecord(
-        JNIEnv *env, jclass /*this*/, jlong timestamp) {
+        JNIEnv *env, jobject /*this*/, jlong timestamp) {
     try {
         COFFEE_TRY() {
 
@@ -43,7 +43,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_sendFrame(
-        JNIEnv *env, jclass /*this*/,
+        JNIEnv *env, jobject /*this*/,
         jobject Y, jobject U, jobject V,
         jint strideY, jint strideU, jint strideV,
         jlong timestamp) {

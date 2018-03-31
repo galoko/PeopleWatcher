@@ -60,3 +60,9 @@ void swallow_cpp_exception_and_throw_java(JNIEnv *env) {
         NewJavaException(env, "java/lang/Error", "Unknown exception type");
     }
 }
+
+void my_assert(bool condition) {
+
+    if (!condition)
+        raise(SIGABRT);
+}

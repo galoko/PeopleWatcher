@@ -30,8 +30,6 @@ private:
     ReaderWriterQueue<AVFrame*> frames;
 
     Engine() {}
-
-    void addFrameQueue(AVFrame* frame);
 public:
     Engine(Engine const&)          = delete;
     void operator=(Engine const&)  = delete;

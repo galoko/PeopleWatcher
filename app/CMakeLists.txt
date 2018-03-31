@@ -24,7 +24,7 @@ add_library(engine SHARED
     src/main/cpp/exceptionUtils.cpp
     src/main/cpp/imageUtils.cpp
     src/main/c/coffeecatch.c
-    src/main/c/coffeejni.c)
+    src/main/cpp/coffeejni.cpp)
 
 target_include_directories(engine PRIVATE
                            ${PREBUILT_DIR}/include

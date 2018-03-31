@@ -5,5 +5,6 @@
 
 inline void assert_no_exception(JNIEnv *env);
 void swallow_cpp_exception_and_throw_java(JNIEnv *env);
+void my_assert(bool condition);
 
 #endif //PEOPLEWATCHER_EXCEPTIONUTILS_H

@@ -31,10 +31,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <jni.h>
 #include <assert.h>
 #include "coffeecatch.h"
+#include <cxxabi.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,10 +52,23 @@ typedef struct t_bt_fun {
   size_t index;
 } t_bt_fun;
 
-static char* bt_print(const char *function, uintptr_t offset) {
+static const char* bt_print(const char *function, uintptr_t offset) {
   if (function != NULL) {
     char buffer[256];
-    snprintf(buffer, sizeof(buffer), "%s:%p", function, (void*) offset);
+
+    const char *functionToUse;
+
+    int ret;
+    char *demangledFunction = abi::__cxa_demangle(function, 0, 0, &ret);
+    if (ret == 0)
+      functionToUse = demangledFunction;
+    else
+      functionToUse = function;
+
+    snprintf(buffer, sizeof(buffer), "%s:%p", functionToUse, (void*) offset);
+
+    free(demangledFunction);
+
     return strdup(buffer);
   } else {
     return "<unknown>";
@@ -73,7 +88,7 @@ static char* bt_addr(uintptr_t addr) {
   || (C) == '_'                  \
   )
 
-static char* bt_module(const char *module) {
+static const char* bt_module(const char *module) {
   if (module != NULL) {
     size_t i;
     char *copy;
@@ -99,32 +114,32 @@ static void bt_fun(void *arg, const char *module, uintptr_t addr,
                    const char *function, uintptr_t offset) {
   t_bt_fun *const t = (t_bt_fun*) arg;
   JNIEnv*const env = t->env;
-  jstring declaringClass = (*env)->NewStringUTF(env, bt_module(module));
-  jstring methodName = (*env)->NewStringUTF(env, bt_addr(addr));
-  jstring fileName = (*env)->NewStringUTF(env, bt_print(function, offset));
+  jstring declaringClass = env->NewStringUTF(bt_module(module));
+  jstring methodName = env->NewStringUTF(bt_addr(addr));
+  jstring fileName = env->NewStringUTF(bt_print(function, offset));
   const int lineNumber = function != NULL ? 0 : -2;  /* "-2" is "inside JNI code" */
-  jobject trace = (*env)->NewObject(env, t->cls_ste, t->cons_ste, 
+  jobject trace = env->NewObject(t->cls_ste, t->cons_ste,
                                     declaringClass, methodName, fileName,
                                     lineNumber);
   if (t->index < t->size) {
-    (*t->env)->SetObjectArrayElement(t->env, t->elements, t->index++, trace);
+    t->env->SetObjectArrayElement(t->elements, t->index++, trace);
   }
 }
 
 void coffeecatch_throw_exception(JNIEnv* env) {
-  jclass cls = (*env)->FindClass(env, "java/lang/Error");
-  jclass cls_ste = (*env)->FindClass(env, "java/lang/StackTraceElement");
+  jclass cls = env->FindClass("java/lang/Error");
+  jclass cls_ste = env->FindClass("java/lang/StackTraceElement");
 
-  jmethodID cons = (*env)->GetMethodID(env, cls, "<init>", "(Ljava/lang/String;)V");
-  jmethodID cons_cause = (*env)->GetMethodID(env, cls, "<init>", "(Ljava/lang/String;Ljava/lang/Throwable;)V");
-  jmethodID cons_ste = (*env)->GetMethodID(env, cls_ste, "<init>",
+  jmethodID cons = env->GetMethodID(cls, "<init>", "(Ljava/lang/String;)V");
+  jmethodID cons_cause = env->GetMethodID(cls, "<init>", "(Ljava/lang/String;Ljava/lang/Throwable;)V");
+  jmethodID cons_ste = env->GetMethodID(cls_ste, "<init>",
     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
-  jmethodID meth_sste = (*env)->GetMethodID(env, cls, "setStackTrace",
+  jmethodID meth_sste = env->GetMethodID(cls, "setStackTrace",
     "([Ljava/lang/StackTraceElement;)V");
 
   /* Exception message. */
   const char*const message = coffeecatch_get_message();
-  jstring str = (*env)->NewStringUTF(env, strdup(message));
+  jstring str = env->NewStringUTF(strdup(message));
 
   /* Final exception. */
   jthrowable exception;
@@ -145,11 +160,11 @@ void coffeecatch_throw_exception(JNIEnv* env) {
   /* Can we produce a stack trace ? */
   if (bt_size > 0) {
     /* Create secondary exception. */
-    jthrowable cause = (jthrowable) (*env)->NewObject(env, cls, cons, str);
+    jthrowable cause = (jthrowable) env->NewObject(cls, cons, str);
 
     /* Stack trace. */
     jobjectArray elements =
-      (*env)->NewObjectArray(env, bt_size, cls_ste, NULL);
+      env->NewObjectArray(bt_size, cls_ste, NULL);
     if (elements != NULL) {
       t_bt_fun t;
       t.env = env;
@@ -158,23 +173,23 @@ void coffeecatch_throw_exception(JNIEnv* env) {
       t.cons_ste = cons_ste;
       t.elements = elements;
       t.index = 0;
-      t.size = bt_size;
+      t.size = (size_t) bt_size;
       coffeecatch_get_backtrace_info(bt_fun, &t);
-      (*env)->CallVoidMethod(env, cause, meth_sste, elements);
+      env->CallVoidMethod(cause, meth_sste, elements);
     }
 
     /* Primary exception */
-    exception = (jthrowable) (*env)->NewObject(env, cls, cons_cause, str, cause);
+    exception = (jthrowable) env->NewObject(cls, cons_cause, str, cause);
   } else {
     /* Simple exception */
-    exception = (jthrowable) (*env)->NewObject(env, cls, cons, str);
+    exception = (jthrowable) env->NewObject(cls, cons, str);
   }
 
   /* Throw exception. */
   if (exception != NULL) {
-    (*env)->Throw(env, exception);
+    env->Throw(exception);
   } else {
-    (*env)->ThrowNew(env, cls, strdup(message));
+    env->ThrowNew(cls, strdup(message));
   }
 }
 

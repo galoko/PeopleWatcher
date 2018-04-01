@@ -28,11 +28,11 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_startRecord(
-        JNIEnv *env, jobject /*this*/, jlong timestamp) {
+        JNIEnv *env, jobject /*this*/) {
     try {
         COFFEE_TRY() {
 
-            Engine::getInstance().startRecord(timestamp);
+            Engine::getInstance().startRecord();
 
         } COFFEE_CATCH() {
             coffeecatch_throw_exception(env);
@@ -56,6 +56,21 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
             uint8_t* dataV = (uint8_t *) env->GetDirectBufferAddress(V);
 
             Engine::getInstance().sendFrame(dataY, dataU, dataV, strideY, strideU, strideV, timestamp);
+
+        } COFFEE_CATCH() {
+            coffeecatch_throw_exception(env);
+        } COFFEE_END();
+    } catch(...) {
+        swallow_cpp_exception_and_throw_java(env);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_workerThreadLoop(
+        JNIEnv *env, jobject /*this*/) {
+    try {
+        COFFEE_TRY() {
+
+            Engine::getInstance().workerThreadLoop(env);
 
         } COFFEE_CATCH() {
             coffeecatch_throw_exception(env);

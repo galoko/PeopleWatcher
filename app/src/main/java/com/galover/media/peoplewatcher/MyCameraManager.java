@@ -92,8 +92,7 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
-
-            EngineManager.startRecord(timestamp);
+            // what should we do here? it's called for each frame
         }
 
         @Override
@@ -138,6 +137,9 @@ final class MyCameraManager  {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     try {
+
+                        EngineManager.startRecord();
+
                         session = cameraCaptureSession;
 
                         CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);

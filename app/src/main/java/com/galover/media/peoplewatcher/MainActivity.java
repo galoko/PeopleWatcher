@@ -23,7 +23,7 @@ public class MainActivity extends Activity {
 
     void startup() {
 
-        EngineManager.initialize(Environment.getExternalStorageDirectory().getAbsolutePath());
+        EngineManager.initialize();
 
         cameraManager = new MyCameraManager(this);
 

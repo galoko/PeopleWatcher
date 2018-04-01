@@ -1,13 +1,13 @@
 #include "imageUtils.h"
 
-#include <cstdio>
-#include <cstring>
+#include "log.h"
 #include <time.h>
 
-#include <android/log.h>
-#include "ffmpegUtils.h"
+#include "libswscale/swscale.h"
 
-void dumpBMP24(uint8_t* pixels, int width, int height, char* filePath) {
+#include "generalUtils.h"
+
+int dumpBMP24(uint8_t* pixels, int width, int height, const char* filePath) {
 
     FILE *bmpFile;
     int fileSize = 54 + 3 * width * height;
@@ -40,11 +40,15 @@ void dumpBMP24(uint8_t* pixels, int width, int height, char* filePath) {
     }
 
     fclose(bmpFile);
+
+    return 1;
 }
 
-void dumpBMP8(uint8_t* pixels, int width, int height, char* filePath) {
+int dumpBMP8(uint8_t* pixels, int width, int height, const char* filePath) {
 
-    uint8_t* pixels24 = new uint8_t[width * height * 3];
+    uint8_t* pixels24 = malloc((size_t) (width * height * 3));
+    if (!pixels24)
+        return 0;
 
     for (int i = 0; i < width * height; i++){
         pixels24[i * 3 + 0] = pixels[i];
@@ -52,9 +56,45 @@ void dumpBMP8(uint8_t* pixels, int width, int height, char* filePath) {
         pixels24[i * 3 + 2] = pixels[i];
     }
 
-    dumpBMP24(pixels24, width, height, filePath);
+    int res = dumpBMP24(pixels24, width, height, filePath);
 
-    delete[] pixels24;
+    free(pixels24);
+
+    return res;
+}
+
+int dumpYUV420(AVFrame *yuv_frame, const char* filePath) {
+
+    int res = 0;
+
+    AVFrame* rgb_frame = av_frame_alloc();
+    rgb_frame->width = yuv_frame->width;
+    rgb_frame->height = yuv_frame->height;
+    rgb_frame->format = AV_PIX_FMT_BGR24;
+    if (av_frame_get_buffer(rgb_frame, 32) < 0)
+        goto exit;
+
+    struct SwsContext* ctx = sws_getContext(yuv_frame->width, yuv_frame->height, (enum AVPixelFormat) yuv_frame->format,
+                                     rgb_frame->width, rgb_frame->height, (enum AVPixelFormat) rgb_frame->format,
+                                     SWS_POINT, NULL, NULL, NULL);
+    if (!ctx)
+        goto exit;
+
+    int ret = sws_scale(ctx, ((const uint8_t *const*) &yuv_frame->data), yuv_frame->linesize, 0,
+                        yuv_frame->height, rgb_frame->data, rgb_frame->linesize);
+    if (ret < 0)
+        goto exit;
+
+    res = dumpBMP24(rgb_frame->data[0], rgb_frame->width, rgb_frame->height, filePath);
+
+    exit:
+
+    if (ctx)
+        sws_freeContext(ctx);
+
+    av_frame_free(&rgb_frame);
+
+    return res;
 }
 
 void convert_yuv420_888_to_yuv420p(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV, int strideY,
@@ -104,14 +144,6 @@ void convert_yuv420_888_to_yuv420p(uint8_t* dataY, uint8_t* dataU, uint8_t* data
     }
 }
 
-#define BILLION 1E9
-
-double getTime(void) {
-    struct timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    return time.tv_sec + time.tv_nsec / BILLION;
-}
-
 #pragma clang optimize off
 
 #define WIDTH 640
@@ -119,15 +151,16 @@ double getTime(void) {
 
 void benchmark_convert_yuv420_888_to_yuv420p(void) {
 
-    uint8_t* Y = new uint8_t[WIDTH * HEIGHT];
-    uint8_t* U = new uint8_t[WIDTH * HEIGHT];
-    uint8_t* V = new uint8_t[WIDTH * HEIGHT];
+    uint8_t* Y = malloc(WIDTH * HEIGHT);
+    uint8_t* U = malloc(WIDTH * HEIGHT);
+    uint8_t* V = malloc(WIDTH * HEIGHT);
 
     AVFrame* yuv_frame = av_frame_alloc();
     yuv_frame->width = WIDTH;
     yuv_frame->height = HEIGHT;
     yuv_frame->format = AV_PIX_FMT_YUV420P;
-    av_check_error(av_frame_get_buffer(yuv_frame, 32));
+    if (av_frame_get_buffer(yuv_frame, 32) < 0)
+        return;
 
     for (int times = 0; times < 10; times++) {
         double startTime = getTime();
@@ -136,14 +169,14 @@ void benchmark_convert_yuv420_888_to_yuv420p(void) {
 
         double elapsed = getTime() - startTime;
 
-        __android_log_print(ANDROID_LOG_INFO, "BENCHMARK", "%f\n", elapsed);
+        print_log(ANDROID_LOG_INFO, "Benchmark", "%f\n", elapsed);
     }
 
     av_frame_free(&yuv_frame);
 
-    delete[] V;
-    delete[] U;
-    delete[] Y;
+    free(V);
+    free(U);
+    free(Y);
 }
 
 #pragma clang optimize on

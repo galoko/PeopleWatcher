@@ -3,8 +3,10 @@
 
 #include <string>
 #include <inttypes.h>
+#include <jni.h>
 
 #include "readerwriterqueue.h"
+#include "FFmpegUtils.h"
 
 extern "C" {
 #include "libavutil/frame.h"
@@ -27,17 +29,22 @@ private:
 
     std::string sdCardPath;
 
-    ReaderWriterQueue<AVFrame*> frames;
+    long long startTime;
+    BlockingReaderWriterQueue<AVFrame*> frames;
 
-    Engine() {}
+    FFmpegEncoder encoder;
+
+    Engine();
 public:
     Engine(Engine const&)          = delete;
     void operator=(Engine const&)  = delete;
 
     void initialize(const char* sdCardPathStr);
-    void startRecord(long long timestamp);
+    void startRecord(void);
     void sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                    int strideY, int strideU, int strideV, long long timestamp);
+
+    void workerThreadLoop(JNIEnv* env);
 };
 
 #endif //PEOPLEWATCHER_ENGINE_H

@@ -8,12 +8,28 @@
 extern "C" {
 #include "libavutil/error.h"
 #include "libavutil/avutil.h"
+#include "libavutil/opt.h"
+
+#include "log.h"
 }
 
 void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, const char *filePath) {
 
-    AVCodec *video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    free();
 
+    // search for all structs we need, before we allocate something
+
+    AVOutputFormat *out_format = av_guess_format(NULL, filePath, NULL);
+    if (out_format == NULL)
+        throw std::runtime_error("Couldn't find output format");
+
+    AVCodec *video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (video_codec == NULL)
+        throw std::runtime_error("Couldn't find video codec");
+
+    // initializing video codec
+
+    my_assert(video_codec_ctx == NULL);
     video_codec_ctx = avcodec_alloc_context3(video_codec);
     if (video_codec_ctx == NULL)
         throw std::runtime_error("Couldn't allocate video codec context");
@@ -21,13 +37,17 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     video_codec_ctx->width = width;
     video_codec_ctx->height = height;
     video_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    video_codec_ctx->bit_rate = 1 * 1000 * 1000;
     video_codec_ctx->time_base = av_make_q(1, 30);
     video_codec_ctx->thread_count = 4;
     video_codec_ctx->profile = FF_PROFILE_H264_HIGH;
     video_codec_ctx->level = 42;
 
-    AVDictionary *video_params = NULL;
+    // sync codec with output format (important)
+
+    if (out_format->flags & AVFMT_GLOBALHEADER)
+        video_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    my_assert(video_params == NULL);
     av_dict_set(&video_params, "preset", "veryfast", 0);
 
     switch (recordType) {
@@ -41,75 +61,159 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
             my_assert(false);
     }
 
-    AVOutputFormat *out_format = av_guess_format(NULL, filePath, NULL);
-
-    if (out_format->flags & AVFMT_GLOBALHEADER)
-        video_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-
     av_check_error(avcodec_open2(video_codec_ctx, video_codec, &video_params));
 
-    AVFormatContext *format_ctx;
+    // setup file format
+
+    my_assert(format_ctx == NULL);
     av_check_error(avformat_alloc_output_context2(&format_ctx, out_format, NULL, NULL));
+
+    // add video stream to file
 
     video_stream = avformat_new_stream(format_ctx, video_codec);
     if (video_stream == NULL)
         throw std::runtime_error("Couldn't create video stream");
 
     video_stream->codecpar->codec_type = video_codec_ctx->codec_type;
-    video_stream->codecpar->codec_id   = video_codec_ctx->codec_id;
-    video_stream->codecpar->codec_tag  = video_codec_ctx->codec_tag;
-    video_stream->codecpar->width      = video_codec_ctx->width;
-    video_stream->codecpar->height     = video_codec_ctx->height;
-    video_stream->codecpar->format     = video_codec_ctx->pix_fmt;
-    video_stream->codecpar->profile    = video_codec_ctx->profile;
-    video_stream->codecpar->level      = video_codec_ctx->level;
-    video_stream->codecpar->bit_rate   = video_codec_ctx->bit_rate;
+    video_stream->codecpar->codec_id = video_codec_ctx->codec_id;
+    video_stream->codecpar->codec_tag = video_codec_ctx->codec_tag;
+    video_stream->codecpar->width = video_codec_ctx->width;
+    video_stream->codecpar->height = video_codec_ctx->height;
+    video_stream->codecpar->format = video_codec_ctx->pix_fmt;
+    video_stream->codecpar->profile = video_codec_ctx->profile;
+    video_stream->codecpar->level = video_codec_ctx->level;
+    video_stream->codecpar->bit_rate = video_codec_ctx->bit_rate;
+
+    // copy extra data from codec if any
+    // this is also part of syncing codec with output format
+    // output format may will this data to produce valid output
 
     size_t extradata_size = (size_t) video_codec_ctx->extradata_size;
     video_stream->codecpar->extradata_size = extradata_size;
     if (extradata_size > 0) {
-        video_stream->codecpar->extradata = (uint8_t *) av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
+        video_stream->codecpar->extradata = (uint8_t *) av_mallocz(
+                extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
         memcpy(video_stream->codecpar->extradata, video_codec_ctx->extradata, extradata_size);
     }
 
-    av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_READ_WRITE));
+    // creating actual file on disk
+    av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE));
 
+    // initialize file header
     av_check_error(avformat_write_header(format_ctx, NULL));
 
     // filters
 
-    AVRational input_time_base = av_make_q(1, 1000 * 1000 * 1000);
+    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
+    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
 
-    AVFilterGraph* video_filter_graph = avfilter_graph_alloc();
-    const AVFilter* buffersrc = avfilter_get_by_name("buffer");
-    const AVFilter* buffersink = avfilter_get_by_name("buffersink");
-
-    AVFilterInOut* outputs = avfilter_inout_alloc();
-    AVFilterInOut* inputs = avfilter_inout_alloc();
+    my_assert(video_filter_graph == NULL);
+    video_filter_graph = avfilter_graph_alloc();
 
     char args[512];
+
     snprintf(args, sizeof(args),
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d",
              video_codec_ctx->width, video_codec_ctx->height, video_codec_ctx->pix_fmt,
-             input_time_base.num, input_time_base.den,
-             video_codec_ctx->sample_aspect_ratio.num, video_codec_ctx->sample_aspect_ratio.den);
+             input_time_base.num, input_time_base.den);
 
-    av_check_error(avfilter_graph_create_filter(&video_buffersrc_ctx, buffersrc, "in", args, NULL, video_filter_graph));
+    av_check_error(avfilter_graph_create_filter(&video_buffersrc_ctx, buffersrc, "in", args, NULL,
+                                                video_filter_graph));
 
-    av_check_error(avfilter_graph_create_filter(&video_buffersink_ctx, buffersink, "out", NULL, NULL, video_filter_graph));
+    av_check_error(avfilter_graph_create_filter(&video_buffersink_ctx, buffersink, "out", NULL, NULL,
+                                         video_filter_graph));
+
+    my_assert(outputs == NULL);
+    outputs = avfilter_inout_alloc();
+    outputs->name       = av_strdup("in");
+    outputs->filter_ctx = video_buffersrc_ctx;
+    outputs->pad_idx    = 0;
+    outputs->next       = NULL;
+
+    my_assert(inputs == NULL);
+    inputs = avfilter_inout_alloc();
+    inputs->name        = av_strdup("out");
+    inputs->filter_ctx  = video_buffersink_ctx;
+    inputs->pad_idx     = 0;
+    inputs->next        = NULL;
+
+    switch (recordType) {
+        case TestData:
+            snprintf(args, sizeof(args), "null");
+            break;
+        case Record:
+            snprintf(args, sizeof(args),
+                     "drawtext=fontfile='/system/fonts/DroidSans.ttf':" \
+                     "text=%%{localtime\\}:x=5:y=5:fontsize=24:" \
+                     "fontcolor=white@0.75:box=1:boxcolor=black@0.75");
+            break;
+        default:
+            snprintf(args, sizeof(args), "null");
+            my_assert(false);
+    }
+
+    av_check_error(avfilter_graph_parse_ptr(video_filter_graph, args, &inputs, &outputs, NULL));
+
+    av_check_error(avfilter_graph_config(video_filter_graph, NULL));
+}
+
+void FFmpegEncoder::flushVideoCodec(void) {
+    // TODO flush codec
+}
+
+void FFmpegEncoder::flushVideoFilters(void) {
+    // TODO flush filters
+}
+
+void FFmpegEncoder::closeRecord(void) {
+
+    flushVideoCodec();
+
+    flushVideoFilters();
+
+    av_check_error(av_write_trailer(format_ctx));
+
+    free();
 }
 
 void FFmpegEncoder::free(void) {
 
+    video_stream = NULL;
+    if (format_ctx != NULL) {
+
+        avio_closep(&format_ctx->pb);
+
+        avformat_free_context(format_ctx);
+        format_ctx = NULL;
+    }
+
+    av_dict_free(&video_params);
+    avcodec_free_context(&video_codec_ctx);
+
+    avfilter_graph_free(&video_filter_graph);
+
+    video_buffersink_ctx = NULL;
+    video_buffersrc_ctx = NULL;
+
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
 }
 
 void FFmpegEncoder::writeFrame(AVFrame* frame) {
 
 }
 
-void FFmpegEncoder::closeRecord(void) {
+void FFmpegEncoder::TestMemoryLeak(RecordType recordType, int width, int height, const char *filePath) {
 
-    free();
+    FFmpegEncoder instance = FFmpegEncoder();
+
+    for (int counter = 0; counter < 10 * 1000 * 1000; counter++) {
+        instance.startRecord(recordType, width, height, filePath);
+
+        instance.closeRecord();
+    }
+
+    my_assert(false);
 }
 
 // log & error handling

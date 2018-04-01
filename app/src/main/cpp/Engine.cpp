@@ -29,16 +29,20 @@ void Engine::initialize(const char *sdCardPath) {
 
     setup_ffmpeg_log();
 
+    avfilter_register_all();
+
     this->sdCardPath = std::string(sdCardPath);
 
     this->initialized = 1;
+
+    FFmpegEncoder::TestMemoryLeak(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
 }
 
 void Engine::startRecord(void) {
 
     this->startTime = 0;
 
-    encoder.startRecord(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.mkv").c_str());
+    encoder.startRecord(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
 }
 
 void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,

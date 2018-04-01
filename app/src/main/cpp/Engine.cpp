@@ -35,23 +35,24 @@ void Engine::initialize(const char *sdCardPath) {
 
     this->initialized = 1;
 
-    FFmpegEncoder::TestMemoryLeak(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
+    // FFmpegEncoder::TestMemoryLeak(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
 }
 
 void Engine::startRecord(void) {
 
-    this->startTime = 0;
+    // for now - doing nothing for this method
+}
 
-    encoder.startRecord(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
+void Engine::stopRecord(void) {
+
+    if (!frames.try_enqueue(NULL)) {
+
+        throw new std::runtime_error("Couldn't send stop signal to worker thread");
+    }
 }
 
 void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                        int strideY, int strideU, int strideV, long long timestamp) {
-
-    if (this->startTime == 0)
-        this->startTime = timestamp;
-
-    my_assert(timestamp >= this->startTime);
 
     if (this->frames.size_approx() < FRAME_BUFFER_SIZE) {
 
@@ -80,15 +81,47 @@ void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
 
 void Engine::workerThreadLoop(JNIEnv* env) {
 
-    while (1) {
+    static volatile bool isEngineWorkerThreadTerminated = false;
+
+    long long startTime = 0;
+
+    while (!isEngineWorkerThreadTerminated) {
 
         AVFrame* yuv_frame;
 
         this->frames.wait_dequeue(yuv_frame);
 
-        if (yuv_frame == NULL)
-            break;
+        // null frame stop record
+        if (yuv_frame == NULL) {
 
-        dumpYUV420(yuv_frame, (this->sdCardPath + "/dump.bmp").c_str());
+            if (startTime > 0) {
+
+                encoder.closeRecord();
+                startTime = 0;
+            }
+
+            continue;
+        }
+
+        if (startTime == 0) {
+
+            startTime = yuv_frame->pts;
+
+            encoder.startRecord(TestData, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str());
+        }
+
+        my_assert(yuv_frame->pts >= startTime);
+        yuv_frame->pts-= startTime;
+
+        double frame_time = yuv_frame->pts / (1000.0 * 1000.0 * 1000.0);
+
+        // dumpYUV420(yuv_frame, (this->sdCardPath + "/dump.bmp").c_str());
+
+        encoder.writeFrame(yuv_frame);
+
+        yuv_frame = NULL;
+
+        if (frame_time >= 5.0)
+            encoder.closeRecord();
     }
 }

@@ -9,6 +9,8 @@ extern "C" {
 #include "libavutil/error.h"
 #include "libavutil/avutil.h"
 #include "libavutil/opt.h"
+#include "libavfilter/buffersink.h"
+#include "libavfilter/buffersrc.h"
 
 #include "log.h"
 }
@@ -16,6 +18,8 @@ extern "C" {
 void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, const char *filePath) {
 
     free();
+
+    input_time_base = av_make_q(1, 1000 * 1000 * 1000);
 
     // search for all structs we need, before we allocate something
 
@@ -155,21 +159,83 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     av_check_error(avfilter_graph_parse_ptr(video_filter_graph, args, &inputs, &outputs, NULL));
 
     av_check_error(avfilter_graph_config(video_filter_graph, NULL));
+
+    filtered_video_frame = av_frame_alloc();
 }
 
-void FFmpegEncoder::flushVideoCodec(void) {
-    // TODO flush codec
+void FFmpegEncoder::writeFrame(AVFrame* frame) {
+
+    int ret = av_buffersrc_add_frame(video_buffersrc_ctx, frame);
+    if (ret < 0) {
+        av_frame_free(&frame);
+        av_check_error(ret);
+    }
+
+    while (true) {
+        ret = av_buffersink_get_frame(video_buffersink_ctx, filtered_video_frame);
+        if (ret >= 0) {
+
+            filtered_video_frame->pts = av_rescale_q(filtered_video_frame->pts,
+                                                     input_time_base, video_codec_ctx->time_base);
+
+            encodeFrame(filtered_video_frame);
+        } else
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+        } else {
+            av_check_error(ret);
+            break;
+        }
+    }
 }
 
-void FFmpegEncoder::flushVideoFilters(void) {
-    // TODO flush filters
+void FFmpegEncoder::encodeFrame(AVFrame *frame) {
+
+    av_check_error(avcodec_send_frame(video_codec_ctx, frame));
+
+    av_frame_unref(frame);
+
+    while (true) {
+
+        AVPacket packet;
+        av_init_packet(&packet);
+
+        int ret = avcodec_receive_packet(video_codec_ctx, &packet);
+        if (ret >= 0) {
+
+            av_packet_rescale_ts(&packet, video_codec_ctx->time_base, video_stream->time_base);
+            packet.stream_index = video_stream->index;
+
+            writePacket(&packet);
+        } else
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+        } else {
+            av_check_error(ret);
+            break;
+        }
+    }
+}
+
+void FFmpegEncoder::writePacket(AVPacket *packet) {
+
+    int ret = av_interleaved_write_frame(format_ctx, packet);
+    if (ret < 0) {
+        av_packet_unref(packet);
+        av_check_error(ret);
+    }
 }
 
 void FFmpegEncoder::closeRecord(void) {
 
-    flushVideoCodec();
+    // flush filters
+    writeFrame(NULL);
 
-    flushVideoFilters();
+    // flush codec
+    encodeFrame(NULL);
+
+    // flush output file
+    av_check_error(av_interleaved_write_frame(format_ctx, NULL));
 
     av_check_error(av_write_trailer(format_ctx));
 
@@ -197,10 +263,8 @@ void FFmpegEncoder::free(void) {
 
     avfilter_inout_free(&inputs);
     avfilter_inout_free(&outputs);
-}
 
-void FFmpegEncoder::writeFrame(AVFrame* frame) {
-
+    av_frame_free(&filtered_video_frame);
 }
 
 void FFmpegEncoder::TestMemoryLeak(RecordType recordType, int width, int height, const char *filePath) {

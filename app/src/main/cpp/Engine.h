@@ -29,7 +29,6 @@ private:
 
     std::string sdCardPath;
 
-    long long startTime;
     BlockingReaderWriterQueue<AVFrame*> frames;
 
     FFmpegEncoder encoder;
@@ -41,10 +40,11 @@ public:
 
     void initialize(const char* sdCardPathStr);
     void startRecord(void);
+    void stopRecord(void);
     void sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                    int strideY, int strideU, int strideV, long long timestamp);
 
-    void workerThreadLoop(JNIEnv* env);
+    void workerThreadLoop(JNIEnv* env) __attribute__((noreturn));
 };
 
 #endif //PEOPLEWATCHER_ENGINE_H

@@ -20,7 +20,7 @@ class FFmpegEncoder
 {
 private:
 
-    static const constexpr AVRational input_time_base = { .num = 1, .den = 1000 * 1000 * 1000 };
+    AVRational input_time_base;
 
     AVCodecContext *video_codec_ctx;
     AVDictionary *video_params;
@@ -31,9 +31,10 @@ private:
     AVFilterGraph *video_filter_graph;
     AVFilterInOut *inputs, *outputs;
     AVFilterContext *video_buffersink_ctx, *video_buffersrc_ctx;
+    AVFrame *filtered_video_frame;
 
-    void flushVideoCodec(void);
-    void flushVideoFilters(void);
+    void encodeFrame(AVFrame *frame);
+    void writePacket(AVPacket *packet);
 
     void free(void);
 public:

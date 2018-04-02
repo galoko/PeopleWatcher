@@ -22,19 +22,19 @@ class FFmpegEncoder
 {
 private:
 
-    AVRational input_time_base;
-
-    AVCodecContext *video_codec_ctx;
-    AVDictionary *video_params;
+    AVRational input_time_base, mediaCodec_time_base;
 
     AVFormatContext *format_ctx;
     AVStream *video_stream;
+
+    AMediaFormat* format;
+    AMediaCodec* codec;
 
     AVFilterGraph *video_filter_graph;
     AVFilterInOut *inputs, *outputs;
     AVFilterContext *video_buffersink_ctx, *video_buffersrc_ctx;
     AVFrame *filtered_video_frame;
-    long long last_pts;
+    bool isHeaderWritten;
 
     void encodeFrame(AVFrame *frame);
     void writePacket(AVPacket *packet);

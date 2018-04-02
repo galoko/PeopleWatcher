@@ -4,7 +4,9 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.*;
+import android.hardware.camera2.CaptureRequest.*;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.util.Log;
 import android.view.Surface;
 import android.media.*;
@@ -105,14 +107,45 @@ final class MyCameraManager  {
                 image.close();
             }
 
-            if (frameTime > 15.0) {
+            Integer AWBState = result.get(TotalCaptureResult.CONTROL_AWB_STATE);
+            if (AWBState != null && AWBState == CaptureResult.CONTROL_AWB_STATE_CONVERGED) {
+
+                try {
+                    session.stopRepeating();
+
+                    RggbChannelVector colorGain = result.get(CaptureResult.COLOR_CORRECTION_GAINS);
+                    Integer colorAberrationMode = result.get(CaptureResult.COLOR_CORRECTION_ABERRATION_MODE);
+                    Integer colorMode = result.get(CaptureResult.COLOR_CORRECTION_MODE);
+                    ColorSpaceTransform colorSpaceTransform = result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM);
+
+                    CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+
+                    builder.addTarget(frameSurface);
+                    builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                    builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF);
+                    builder.set(CaptureRequest.COLOR_CORRECTION_MODE, colorMode);
+                    builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, colorGain);
+                    builder.set(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, colorAberrationMode);
+                    builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, colorSpaceTransform);
+                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+
+                    session.setRepeatingRequest(builder.build(), this, null);
+                } catch (CameraAccessException e) {
+                    throw new Error("Couldn't stop repeating request");
+                }
+            }
+
+            if (frameTime > 3 * 60.0) {
 
                 EngineManager.stopRecord();
 
                 try {
+                    // TODO somehow wait for engine to done it's shit
+
                     Thread.sleep(2000);
                 } catch (InterruptedException e) {
-                    // ?
+                    //
                 }
 
                 context.finish();
@@ -127,12 +160,12 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureSequenceCompleted(@NonNull CameraCaptureSession session, int sequenceId, long frameNumber) {
-            throw new NotImplementedBehaviour("Capture sequence is completed");
+            // throw new NotImplementedBehaviour("Capture sequence is completed");
         }
 
         @Override
         public void onCaptureSequenceAborted(@NonNull CameraCaptureSession session, int sequenceId) {
-            throw new NotImplementedBehaviour("Capture sequence aborted");
+            // throw new NotImplementedBehaviour("Capture sequence aborted");
         }
 
         @Override
@@ -163,8 +196,9 @@ final class MyCameraManager  {
 
                         builder.addTarget(frameSurface);
                         builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                        builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO);
                         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
+                        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
 
                         session.setRepeatingRequest(builder.build(), new MyCaptureCallback(), null);
                     } catch (CameraAccessException e) {

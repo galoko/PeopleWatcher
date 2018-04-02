@@ -21,7 +21,6 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     free();
 
     input_time_base = av_make_q(1, 1000 * 1000 * 1000); // nanoseconds
-    mediaCodec_time_base = av_make_q(1, 1000 * 1000); // microseconds
 
     // search for all structs we need, before we allocate something
 
@@ -29,6 +28,41 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     if (out_format == NULL)
         throw std::runtime_error("Couldn't find output format");
 
+#ifdef USE_FFMPEG_ENCODER
+    // find encoder
+    AVCodec *video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (video_codec == NULL)
+        throw std::runtime_error("Couldn't find video codec");
+
+    // initializing video codec
+
+    my_assert(video_codec_ctx == NULL);
+    video_codec_ctx = avcodec_alloc_context3(video_codec);
+    if (video_codec_ctx == NULL)
+        throw std::runtime_error("Couldn't allocate video codec context");
+
+    video_codec_ctx->width = width;
+    video_codec_ctx->height = height;
+    video_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    video_codec_ctx->time_base = av_make_q(1, 60);
+    video_codec_ctx->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
+
+    // sync codec with output format (important)
+
+    if (out_format->flags & AVFMT_GLOBALHEADER)
+        video_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    my_assert(video_params == NULL);
+    av_dict_set(&video_params, "preset", "ultrafast", 0);
+    av_dict_set(&video_params, "tune", "stillimage", 0);
+    av_dict_set(&video_params, "x264-params", "cabac=0:deblock=1:subme=1:qp=30:ref=0:b-adapt=0:me=dia", 0);
+
+    video_codec_ctx->bit_rate = 250 * 1000;
+
+    av_check_error(avcodec_open2(video_codec_ctx, video_codec, &video_params));
+
+    encoder_time_base = video_codec_ctx->time_base;
+#else
     // initialize MediaCodec
 
     my_assert(codec == NULL);
@@ -63,6 +97,9 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     AMediaFormat_delete(format);
     format = NULL;
 
+    encoder_time_base = av_make_q(1, 1000 * 1000); // microseconds
+#endif
+
     // setup file format
 
     my_assert(format_ctx == NULL);
@@ -84,7 +121,26 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
     av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK));
 
+#ifdef USE_FFMPEG_ENCODER
+    // copy extra data from codec if any
+    // this is also part of syncing codec with output format
+    // output format may will this data to produce valid output
+
+    size_t extradata_size = (size_t) video_codec_ctx->extradata_size;
+    video_stream->codecpar->extradata_size = extradata_size;
+    if (extradata_size > 0) {
+        video_stream->codecpar->extradata = (uint8_t *) av_mallocz(
+                extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
+        memcpy(video_stream->codecpar->extradata, video_codec_ctx->extradata, extradata_size);
+    }
+
+    // initialize file header
+    av_check_error(avformat_write_header(format_ctx, NULL));
+
+    isHeaderWritten = true;
+#else
     isHeaderWritten = false;
+#endif
 
     // filters
 
@@ -157,7 +213,7 @@ void FFmpegEncoder::writeFrame(AVFrame* frame) {
         if (ret >= 0) {
 
             filtered_video_frame->pts = av_rescale_q(filtered_video_frame->pts,
-                                                     input_time_base, mediaCodec_time_base);
+                                                     input_time_base, encoder_time_base);
 
             encodeFrame(filtered_video_frame);
         } else
@@ -174,6 +230,32 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
 
     double startTime = getTime();
 
+#ifdef USE_FFMPEG_ENCODER
+    av_check_error(avcodec_send_frame(video_codec_ctx, frame));
+
+    av_frame_unref(frame);
+
+    while (true) {
+
+        AVPacket packet;
+        av_init_packet(&packet);
+
+        int ret = avcodec_receive_packet(video_codec_ctx, &packet);
+        if (ret >= 0) {
+
+            av_packet_rescale_ts(&packet, encoder_time_base, video_stream->time_base);
+            packet.stream_index = video_stream->index;
+
+            writePacket(&packet);
+        } else
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+        } else {
+            av_check_error(ret);
+            break;
+        }
+    }
+#else
     if (frame == NULL) {
 
         media_status_t status;
@@ -259,7 +341,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
                 packet.size = info.size;
                 packet.pts = info.presentationTimeUs;
 
-                av_packet_rescale_ts(&packet, mediaCodec_time_base, video_stream->time_base);
+                av_packet_rescale_ts(&packet, encoder_time_base, video_stream->time_base);
                 packet.stream_index = video_stream->index;
 
                 writePacket(&packet);
@@ -275,6 +357,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
         } else
             throw new std::runtime_error("Error while getting output buffer");
     }
+#endif
 
     double elapsed = getTime() - startTime;
 
@@ -321,6 +404,10 @@ void FFmpegEncoder::free(void) {
 
     // video encoder
 
+#ifdef USE_FFMPEG_ENCODER
+    av_dict_free(&video_params);
+    avcodec_free_context(&video_codec_ctx);
+#else
     if (format != NULL) {
         AMediaFormat_delete(format);
         format = NULL;
@@ -330,6 +417,7 @@ void FFmpegEncoder::free(void) {
         AMediaCodec_delete(codec);
         codec = NULL;
     }
+#endif
 
     // filters
 

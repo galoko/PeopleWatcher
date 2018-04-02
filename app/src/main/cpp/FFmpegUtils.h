@@ -18,23 +18,35 @@ enum RecordType {
     Record
 };
 
+#define USE_FFMPEG_ENCODER
+
 class FFmpegEncoder
 {
 private:
 
-    AVRational input_time_base, mediaCodec_time_base;
+    // timebase
+    AVRational input_time_base, encoder_time_base;
 
+    // file format
     AVFormatContext *format_ctx;
     AVStream *video_stream;
+    bool isHeaderWritten;
 
+#ifdef  USE_FFMPEG_ENCODER
+    // ffmpeg codec
+    AVCodecContext *video_codec_ctx;
+    AVDictionary *video_params;
+#else
+    // hardware codec
     AMediaFormat* format;
     AMediaCodec* codec;
+#endif
 
+    // filters
     AVFilterGraph *video_filter_graph;
     AVFilterInOut *inputs, *outputs;
     AVFilterContext *video_buffersink_ctx, *video_buffersrc_ctx;
     AVFrame *filtered_video_frame;
-    bool isHeaderWritten;
 
     void encodeFrame(AVFrame *frame);
     void writePacket(AVPacket *packet);

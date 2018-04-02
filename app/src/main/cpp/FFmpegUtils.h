@@ -8,6 +8,8 @@ extern "C" {
 #include "libavfilter/avfilter.h"
 };
 
+#include "media/NdkMediaCodec.h"
+
 void setup_ffmpeg_log();
 void av_check_error(int ret);
 
@@ -32,6 +34,7 @@ private:
     AVFilterInOut *inputs, *outputs;
     AVFilterContext *video_buffersink_ctx, *video_buffersrc_ctx;
     AVFrame *filtered_video_frame;
+    long long last_pts;
 
     void encodeFrame(AVFrame *frame);
     void writePacket(AVPacket *packet);

@@ -30,15 +30,14 @@ final class MyCameraManager  {
     private CameraDevice camera;
     private ImageReader frame;
     private Surface frameSurface;
-    private final FrameListener frameListener;
     private CameraCaptureSession session;
+    private long startTime;
 
     MyCameraManager(MainActivity activity) {
 
         context = activity;
-        frameListener = new FrameListener();
         frame = ImageReader.newInstance(WIDTH, HEIGHT, ImageFormat.YUV_420_888, 10);
-        frame.setOnImageAvailableListener(frameListener, null);
+        // frame.setOnImageAvailableListener(frameListener, null);
         frameSurface = frame.getSurface();
         manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
     }
@@ -64,29 +63,6 @@ final class MyCameraManager  {
         }
     };
 
-    private class FrameListener implements ImageReader.OnImageAvailableListener {
-
-        public void onImageAvailable(ImageReader reader) {
-
-            Image image = reader.acquireNextImage();
-            if (image == null)
-                return;
-
-            Image.Plane[] planes = image.getPlanes();
-
-            Image.Plane planeY = planes[0];
-            Image.Plane planeU = planes[1];
-            Image.Plane planeV = planes[2];
-
-            EngineManager.sendFrame(
-                    planeY.getBuffer(),    planeU.getBuffer(),    planeV.getBuffer(),
-                    planeY.getRowStride(), planeU.getRowStride(), planeV.getRowStride(),
-                    image.getTimestamp());
-
-            image.close();
-        }
-    }
-
     public class MyCaptureCallback extends CameraCaptureSession.CaptureCallback {
 
 
@@ -102,7 +78,46 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-            // this called for every frame, but it doesn't matter
+
+            double frameTime = 0.0;
+
+            while (true) {
+                Image image = frame.acquireNextImage();
+                if (image == null)
+                    break;
+
+                Image.Plane[] planes = image.getPlanes();
+
+                Image.Plane planeY = planes[0];
+                Image.Plane planeU = planes[1];
+                Image.Plane planeV = planes[2];
+
+                EngineManager.sendFrame(
+                        planeY.getBuffer(), planeU.getBuffer(), planeV.getBuffer(),
+                        planeY.getRowStride(), planeU.getRowStride(), planeV.getRowStride(),
+                        image.getTimestamp());
+
+                if (startTime == 0)
+                    startTime = image.getTimestamp();
+
+                frameTime = (image.getTimestamp() - startTime) / (1000.0 * 1000.0 * 1000.0);
+
+                image.close();
+            }
+
+            if (frameTime > 15.0) {
+
+                EngineManager.stopRecord();
+
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    // ?
+                }
+
+                context.finish();
+                System.exit(0);
+            }
         }
 
         @Override
@@ -139,6 +154,8 @@ final class MyCameraManager  {
                     try {
 
                         EngineManager.startRecord();
+
+                        startTime = 0;
 
                         session = cameraCaptureSession;
 

@@ -65,6 +65,21 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
     }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_stopRecord(
+        JNIEnv *env, jobject /*this*/) {
+    try {
+        COFFEE_TRY() {
+
+            Engine::getInstance().stopRecord();
+
+        } COFFEE_CATCH() {
+            coffeecatch_throw_exception(env);
+        } COFFEE_END();
+    } catch(...) {
+        swallow_cpp_exception_and_throw_java(env);
+    }
+}
+
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_workerThreadLoop(
         JNIEnv *env, jobject /*this*/) {
     try {

@@ -44,7 +44,7 @@ public:
     void sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                    int strideY, int strideU, int strideV, long long timestamp);
 
-    void workerThreadLoop(JNIEnv* env) __attribute__((noreturn));
+    void workerThreadLoop(JNIEnv* env);
 };
 
 #endif //PEOPLEWATCHER_ENGINE_H

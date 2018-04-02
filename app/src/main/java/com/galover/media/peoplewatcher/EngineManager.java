@@ -13,6 +13,8 @@ final class EngineManager {
     static public native void sendFrame(ByteBuffer Y, ByteBuffer U, ByteBuffer V,
                                         int strideY, int strideU, int strideV, long timestamp);
 
+    static public native void stopRecord();
+
     static private native void workerThreadLoop();
 
     static public void initialize() {

@@ -13,6 +13,11 @@ extern "C" {
 #include "libavfilter/buffersrc.h"
 
 #include "log.h"
+#include "generalUtils.h"
+}
+
+int write_io(void *opaque, uint8_t *buf, int buf_size) {
+    return buf_size;
 }
 
 void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, const char *filePath) {
@@ -31,6 +36,34 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     if (video_codec == NULL)
         throw std::runtime_error("Couldn't find video codec");
 
+    // initialize MediaCodec
+
+    AMediaCodec* codec = AMediaCodec_createEncoderByType("video/avc");
+    if (codec == NULL)
+        throw std::runtime_error("Couldn't create media codec encoder");
+
+    AMediaFormat *format = AMediaFormat_new();
+    AMediaFormat_setString(format, "mime", "video/avc");
+    AMediaFormat_setInt32(format, "width", width);
+    AMediaFormat_setInt32(format, "height", height);
+    AMediaFormat_setInt32(format, "i-frame-interval", 60);
+    AMediaFormat_setInt32(format, "bitrate", 1 * 1000 * 1000);
+    AMediaFormat_setInt32(format, "frame-rate", 20);
+    AMediaFormat_setInt32(format, "bitrate-mode", 1);
+    AMediaFormat_setInt32(format, "color-format", 19);
+
+    media_status_t status;
+
+    status = AMediaCodec_configure(codec, format, NULL, NULL, AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
+    if (status != AMEDIA_OK)
+        throw new std::runtime_error("Couldn't configure media codec encoder");
+
+    status = AMediaCodec_start(codec);
+    if (status != AMEDIA_OK)
+        throw new std::runtime_error("Couldn't start media codec encoder");
+
+    AMediaFormat_delete(format);
+
     // initializing video codec
 
     my_assert(video_codec_ctx == NULL);
@@ -41,10 +74,8 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     video_codec_ctx->width = width;
     video_codec_ctx->height = height;
     video_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    video_codec_ctx->time_base = av_make_q(1, 30);
-    video_codec_ctx->thread_count = 4;
-    video_codec_ctx->profile = FF_PROFILE_H264_HIGH;
-    video_codec_ctx->level = 42;
+    video_codec_ctx->time_base = av_make_q(1, 60);
+    video_codec_ctx->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
 
     // sync codec with output format (important)
 
@@ -52,11 +83,15 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
         video_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
     my_assert(video_params == NULL);
-    av_dict_set(&video_params, "preset", "veryfast", 0);
+    av_dict_set(&video_params, "preset", "fast", 0);
+    av_dict_set(&video_params, "tune", "stillimage", 0);
+    av_dict_set(&video_params, "x264-params", "cabac=0:deblock=1:subme=1:qp=30:ref=0:b-adapt=0:me=dia", 0);
+
+    // video_codec_ctx->bit_rate = 3 * 1000 * 1000;
 
     switch (recordType) {
         case TestData:
-            av_dict_set(&video_params, "crf", "17", 0);
+            // av_dict_set(&video_params, "crf", "17", 0);
             break;
         case Record:
             av_dict_set(&video_params, "crf", "40", 0);
@@ -101,7 +136,19 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     }
 
     // creating actual file on disk
+
     av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE));
+
+    /*
+    size_t bufferSize = 1 * 1024 * 1024; // 1MB
+    unsigned char* buffer = (unsigned char*) av_malloc(bufferSize);
+    AVIOContext *io = avio_alloc_context(buffer, (int) bufferSize, 1, NULL, NULL, write_io, NULL);
+    if (!io) {
+        av_freep(&buffer);
+        throw std::runtime_error("Couldn't allocate IO");
+    }
+    format_ctx->pb = io;
+     */
 
     // initialize file header
     av_check_error(avformat_write_header(format_ctx, NULL));
@@ -118,7 +165,7 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
     snprintf(args, sizeof(args),
              "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d",
-             video_codec_ctx->width, video_codec_ctx->height, video_codec_ctx->pix_fmt,
+             width, height, video_codec_ctx->pix_fmt,
              input_time_base.num, input_time_base.den);
 
     av_check_error(avfilter_graph_create_filter(&video_buffersrc_ctx, buffersrc, "in", args, NULL,
@@ -143,7 +190,11 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
     switch (recordType) {
         case TestData:
-            snprintf(args, sizeof(args), "null");
+            if (video_codec_ctx->width != width || video_codec_ctx->height != height)
+                snprintf(args, sizeof(args), "scale=%d:%d",
+                         video_codec_ctx->width, video_codec_ctx->height);
+            else
+                snprintf(args, sizeof(args), "null");
             break;
         case Record:
             snprintf(args, sizeof(args),
@@ -161,6 +212,8 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     av_check_error(avfilter_graph_config(video_filter_graph, NULL));
 
     filtered_video_frame = av_frame_alloc();
+
+    last_pts = -1;
 }
 
 void FFmpegEncoder::writeFrame(AVFrame* frame) {
@@ -178,6 +231,16 @@ void FFmpegEncoder::writeFrame(AVFrame* frame) {
             filtered_video_frame->pts = av_rescale_q(filtered_video_frame->pts,
                                                      input_time_base, video_codec_ctx->time_base);
 
+            /*
+            if (filtered_video_frame->pts <= last_pts) {
+                last_pts++;
+                filtered_video_frame->pts = last_pts;
+
+                print_log(ANDROID_LOG_WARN, "PTS", "PTS fixed");
+            }
+            last_pts = filtered_video_frame->pts;
+            */
+
             encodeFrame(filtered_video_frame);
         } else
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
@@ -190,6 +253,8 @@ void FFmpegEncoder::writeFrame(AVFrame* frame) {
 }
 
 void FFmpegEncoder::encodeFrame(AVFrame *frame) {
+
+    double startTime = getTime();
 
     av_check_error(avcodec_send_frame(video_codec_ctx, frame));
 
@@ -215,6 +280,10 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
             break;
         }
     }
+
+    double elapsed = getTime() - startTime;
+
+    print_log(ANDROID_LOG_DEBUG, "FRAMETIME", "%f ms per frame\n", elapsed * 1000);
 }
 
 void FFmpegEncoder::writePacket(AVPacket *packet) {
@@ -305,6 +374,9 @@ void av_check_error(int ret) {
 void av_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
 
     enum android_LogPriority priority;
+
+    if (level > AV_LOG_INFO)
+        return;
 
     switch (level) {
         case AV_LOG_PANIC:

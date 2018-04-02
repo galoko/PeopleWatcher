@@ -16,7 +16,7 @@ extern "C" {
 
 #define WIDTH 640
 #define HEIGHT 480
-#define FRAME_BUFFER_SIZE 15
+#define FRAME_BUFFER_SIZE 20 * 8 // 20 fps for 8 seconds
 
 Engine::Engine() : frames(FRAME_BUFFER_SIZE) {
 
@@ -113,15 +113,10 @@ void Engine::workerThreadLoop(JNIEnv* env) {
         my_assert(yuv_frame->pts >= startTime);
         yuv_frame->pts-= startTime;
 
-        double frame_time = yuv_frame->pts / (1000.0 * 1000.0 * 1000.0);
-
         // dumpYUV420(yuv_frame, (this->sdCardPath + "/dump.bmp").c_str());
 
         encoder.writeFrame(yuv_frame);
 
         yuv_frame = NULL;
-
-        if (frame_time >= 5.0)
-            encoder.closeRecord();
     }
 }

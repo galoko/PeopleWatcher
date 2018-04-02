@@ -61,4 +61,5 @@ target_link_libraries(engine
     )
 
 target_link_libraries(engine
+                      mediandk
                       log)

@@ -145,7 +145,7 @@ final class MyCameraManager  {
                 }
             }
 
-            if (frameTime > 1 * 60 * 60) {
+            if (frameTime > 5) {
 
                 EngineManager.stopRecord();
 

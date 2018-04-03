@@ -16,7 +16,7 @@ public class SimpleService extends Service {
                 notificationIntent, 0);
 
         Notification notification = new Notification.Builder(this)
-                .setSmallIcon(R.mipmap.ic_launcher_round)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Watching people")
                 .setContentText("We gonna watch some people")
                 .setContentIntent(pendingIntent).build();

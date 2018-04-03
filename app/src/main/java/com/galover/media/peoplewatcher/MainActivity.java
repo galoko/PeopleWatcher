@@ -9,7 +9,9 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 import java.io.*;
 import android.media.MediaScannerConnection;
-import android.media.*;;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
+import android.content.Intent;
 
 public class MainActivity extends Activity {
 
@@ -34,12 +36,29 @@ public class MainActivity extends Activity {
         try {
             logFile.createNewFile();
 
-            // Runtime.getRuntime().exec("logcat -g 10MB");
+            // Runtime.getRuntime().exec("logcat -G 64KB");
             // Runtime.getRuntime().exec("logcat -c");
-            Runtime.getRuntime().exec("logcat -d -f " + logFile.getAbsolutePath());
+            Runtime.getRuntime().exec("logcat ImageReader_JNI:S -f " + logFile.getAbsolutePath());
         } catch (IOException e) {
             throw new Error("Couldn't setup log to file");
         }
+    }
+
+    private WakeLock wakeLock;
+
+    void preventCPUTurnOff() {
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager == null)
+            throw new Error("Couldn't get power manager");
+
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyWakelockTag");
+        wakeLock.acquire();
+    }
+
+    void startSimpleForegroundService() {
+        Intent service = new Intent(this, SimpleService.class);
+        service.setAction("NOTHING");
+        startService(service);
     }
 
     void startup() {
@@ -47,6 +66,10 @@ public class MainActivity extends Activity {
         EngineManager.initialize();
 
         setupLogToFile();
+
+        startSimpleForegroundService();
+
+        preventCPUTurnOff();
 
         cameraManager = new MyCameraManager(this);
 
@@ -71,7 +94,8 @@ public class MainActivity extends Activity {
                         Manifest.permission.INTERNET,
                         Manifest.permission.ACCESS_NETWORK_STATE,
                         Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                        Manifest.permission.READ_EXTERNAL_STORAGE
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.WAKE_LOCK
                 },1);
     }
 

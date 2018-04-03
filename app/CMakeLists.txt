@@ -58,6 +58,7 @@ target_link_libraries(engine
     ${PREBUILT_DIR}/lib/libopencv_xphoto.a
     ${PREBUILT_DIR}/lib/libtegra_hal.a
     ${PREBUILT_DIR}/lib/libx264.a
+    ${PREBUILT_DIR}/lib/libopenh264.a
     )
 
 target_link_libraries(engine

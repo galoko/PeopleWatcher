@@ -16,6 +16,8 @@ extern "C" {
 #include "generalUtils.h"
 }
 
+#define ENCODER_TAG "PW_ENCODER"
+
 void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, const char *filePath) {
 
     free();
@@ -30,7 +32,12 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
 #ifdef USE_FFMPEG_ENCODER
     // find encoder
-    AVCodec *video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    AVCodec *video_codec;
+#ifdef USE_X264
+    video_codec = avcodec_find_encoder_by_name("libx264");
+#else
+    video_codec = avcodec_find_encoder_by_name("libopenh264");
+#endif
     if (video_codec == NULL)
         throw std::runtime_error("Couldn't find video codec");
 
@@ -46,6 +53,7 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     video_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     video_codec_ctx->time_base = av_make_q(1, 60);
     video_codec_ctx->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
+    video_codec_ctx->level = 30;
 
     // sync codec with output format (important)
 
@@ -53,11 +61,15 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
         video_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
     my_assert(video_params == NULL);
+#ifdef USE_X264
     av_dict_set(&video_params, "preset", "ultrafast", 0);
     av_dict_set(&video_params, "tune", "stillimage", 0);
-    av_dict_set(&video_params, "x264-params", "cabac=0:deblock=1:subme=1:qp=30:ref=0:b-adapt=0:me=dia", 0);
-
-    video_codec_ctx->bit_rate = 250 * 1000;
+    av_dict_set(&video_params, "x264-params", "qp=30:cabac=0:deblock=1:subme=1:ref=0:b-adapt=0:me=dia", 0);
+#else
+    av_dict_set(&video_params, "profile", "baseline", 0);
+    av_dict_set(&video_params, "cabac", "0", 0);
+    video_codec_ctx->bit_rate = 3 * 1000 * 1000;
+#endif
 
     av_check_error(avcodec_open2(video_codec_ctx, video_codec, &video_params));
 
@@ -82,7 +94,7 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
     // constant bitrate
     AMediaFormat_setInt32(format, "bitrate-mode", 1);
-    AMediaFormat_setInt32(format, "bitrate", 250 * 1000);
+    AMediaFormat_setInt32(format, "bitrate", 1 * 1000 * 1000);
 
     media_status_t status;
 
@@ -263,9 +275,11 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
         status = AMediaCodec_flush(codec);
         if (status != AMEDIA_OK)
             throw new std::runtime_error("Couldn't flush media codec encoder");
+
+        print_log(ANDROID_LOG_INFO, ENCODER_TAG, "flushing media codec\n");
     }
     else {
-        ssize_t inputBufferIndex = AMediaCodec_dequeueInputBuffer(codec, 0);
+        ssize_t inputBufferIndex = AMediaCodec_dequeueInputBuffer(codec, -1);
         if (inputBufferIndex >= 0) {
 
             size_t bufferSize;
@@ -291,11 +305,11 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
             media_status_t status;
 
             status = AMediaCodec_queueInputBuffer(codec, (size_t) inputBufferIndex, 0, frameSize,
-                                                  (uint64_t) 10 * 1000 + frame->pts, 0);
+                                                  (uint64_t) frame->pts, 0);
             if (status != AMEDIA_OK)
                 throw new std::runtime_error("Couldn't put buffer back into media codec encoder");
         } else if (inputBufferIndex == -1) {
-            print_log(ANDROID_LOG_WARN, "ENCODER", "Media codec encoder dropped frame\n");
+            print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Media codec encoder dropped frame\n");
         } else
             throw new std::runtime_error("Error while getting input buffer");
 
@@ -340,6 +354,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
                 packet.data = buffer + info.offset;
                 packet.size = info.size;
                 packet.pts = info.presentationTimeUs;
+                packet.dts = packet.pts;
 
                 av_packet_rescale_ts(&packet, encoder_time_base, video_stream->time_base);
                 packet.stream_index = video_stream->index;
@@ -361,7 +376,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
 
     double elapsed = getTime() - startTime;
 
-    print_log(ANDROID_LOG_DEBUG, "FRAMETIME", "%f ms per frame\n", elapsed * 1000);
+    print_log(ANDROID_LOG_DEBUG, ENCODER_TAG, "%f ms per frame\n", elapsed * 1000);
 }
 
 void FFmpegEncoder::writePacket(AVPacket *packet) {
@@ -376,15 +391,21 @@ void FFmpegEncoder::writePacket(AVPacket *packet) {
 void FFmpegEncoder::closeRecord(void) {
 
     // flush filters
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "flushing filters\n");
     writeFrame(NULL);
 
     // flush codec
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "flushing codec\n");
     encodeFrame(NULL);
 
     // flush output file
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "flushing file\n");
     av_check_error(av_interleaved_write_frame(format_ctx, NULL));
 
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "writing headers\n");
     av_check_error(av_write_trailer(format_ctx));
+
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "record closed\n");
 
     free();
 }
@@ -467,6 +488,8 @@ void av_check_error(int ret) {
         throw ffmpeg_error(ret);
 }
 
+#define FFMPEG_TAG "PW_FFMPEG"
+
 void av_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
 
     enum android_LogPriority priority;
@@ -501,7 +524,7 @@ void av_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
             break;
     }
 
-    __android_log_vprint(priority, "FFmpeg", fmt, vl);
+    __android_log_vprint(priority, FFMPEG_TAG, fmt, vl);
 }
 
 void setup_ffmpeg_log(void) {

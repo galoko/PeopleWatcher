@@ -13,6 +13,8 @@ import android.media.*;;
 
 public class MainActivity extends Activity {
 
+    private static final String REPORT_TAG = "PW_REPORT";
+
     // Used to load the 'native-lib' library on application startup.
     static {
         System.loadLibrary("engine");
@@ -22,9 +24,29 @@ public class MainActivity extends Activity {
 
     private MyCameraManager cameraManager;
 
+    void setupLogToFile() {
+        File logFile = new File(Environment.getExternalStorageDirectory().getAbsolutePath() +
+                "/PeopleWatcherLog.txt");
+
+        if (logFile.exists())
+            logFile.delete();
+
+        try {
+            logFile.createNewFile();
+
+            // Runtime.getRuntime().exec("logcat -g 10MB");
+            // Runtime.getRuntime().exec("logcat -c");
+            Runtime.getRuntime().exec("logcat -d -f " + logFile.getAbsolutePath());
+        } catch (IOException e) {
+            throw new Error("Couldn't setup log to file");
+        }
+    }
+
     void startup() {
 
         EngineManager.initialize();
+
+        setupLogToFile();
 
         cameraManager = new MyCameraManager(this);
 
@@ -58,7 +80,7 @@ public class MainActivity extends Activity {
 
         for (int grantResult : grantResults) {
             if (grantResult != PackageManager.PERMISSION_GRANTED)
-                finish();
+                throw new Error("Permissions denied");
         }
 
         startup();
@@ -101,7 +123,7 @@ public class MainActivity extends Activity {
         throwable.printStackTrace(pw);
         report = sw.toString(); // stack trace as a string
 
-        Log.e("Report", report);
+        Log.e(REPORT_TAG, report);
 
         try {
             File reportsDir = getReportsDir();
@@ -121,7 +143,7 @@ public class MainActivity extends Activity {
             reportWriter.close();
         }
         catch (IOException e) {
-            Log.e("Report", "Report write failed: " + e.toString());
+            Log.e(REPORT_TAG, "Report write failed: " + e.toString());
         }
 
         finish();

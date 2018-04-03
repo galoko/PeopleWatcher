@@ -14,6 +14,8 @@ extern "C" {
 #include "exceptionUtils.h"
 #include <string>
 
+#define ENGINE_TAG "PW_ENGINE"
+
 #define WIDTH 640
 #define HEIGHT 480
 #define FRAME_BUFFER_SIZE 20 * 8 // 20 fps for 8 seconds
@@ -75,7 +77,7 @@ void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
         }
     }
     else {
-        print_log(ANDROID_LOG_WARN, "Engine", "YUV frame drop\n");
+        print_log(ANDROID_LOG_WARN, ENGINE_TAG, "YUV frame drop\n");
     }
 }
 

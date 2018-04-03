@@ -24,6 +24,8 @@ class NotImplementedBehaviour extends Error {
 
 final class MyCameraManager  {
 
+    private static final String CAMERA_TAG = "PW_CAMERA";
+
     static final int WIDTH  = 640;
     static final int HEIGHT = 480;
 
@@ -34,6 +36,7 @@ final class MyCameraManager  {
     private Surface frameSurface;
     private CameraCaptureSession session;
     private long startTime;
+    private boolean isWhiteBalanceManual;
 
     MyCameraManager(MainActivity activity) {
 
@@ -107,38 +110,46 @@ final class MyCameraManager  {
                 image.close();
             }
 
-            Integer AWBState = result.get(TotalCaptureResult.CONTROL_AWB_STATE);
-            if (AWBState != null && AWBState == CaptureResult.CONTROL_AWB_STATE_CONVERGED) {
+            if (!isWhiteBalanceManual) {
+                Integer AWBState = result.get(TotalCaptureResult.CONTROL_AWB_STATE);
+                if (AWBState != null && AWBState == CaptureResult.CONTROL_AWB_STATE_CONVERGED) {
 
-                try {
-                    session.stopRepeating();
+                    try {
+                        session.stopRepeating();
 
-                    RggbChannelVector colorGain = result.get(CaptureResult.COLOR_CORRECTION_GAINS);
-                    Integer colorAberrationMode = result.get(CaptureResult.COLOR_CORRECTION_ABERRATION_MODE);
-                    Integer colorMode = result.get(CaptureResult.COLOR_CORRECTION_MODE);
-                    ColorSpaceTransform colorSpaceTransform = result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM);
+                        RggbChannelVector colorGain = result.get(CaptureResult.COLOR_CORRECTION_GAINS);
+                        Integer colorAberrationMode = result.get(CaptureResult.COLOR_CORRECTION_ABERRATION_MODE);
+                        Integer colorMode = result.get(CaptureResult.COLOR_CORRECTION_MODE);
+                        ColorSpaceTransform colorSpaceTransform = result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM);
 
-                    CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                        CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
 
-                    builder.addTarget(frameSurface);
-                    builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-                    builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF);
-                    builder.set(CaptureRequest.COLOR_CORRECTION_MODE, colorMode);
-                    builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, colorGain);
-                    builder.set(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, colorAberrationMode);
-                    builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, colorSpaceTransform);
-                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                        builder.addTarget(frameSurface);
+                        builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                        builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF);
+                        builder.set(CaptureRequest.COLOR_CORRECTION_MODE, colorMode);
+                        builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, colorGain);
+                        builder.set(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, colorAberrationMode);
+                        builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, colorSpaceTransform);
+                        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
 
-                    session.setRepeatingRequest(builder.build(), this, null);
-                } catch (CameraAccessException e) {
-                    throw new Error("Couldn't stop repeating request");
+                        session.setRepeatingRequest(builder.build(), this, null);
+
+                        isWhiteBalanceManual = true;
+
+                        Log.i(CAMERA_TAG, "white balance set to manual");
+                    } catch (CameraAccessException e) {
+                        throw new Error("Couldn't stop repeating request");
+                    }
                 }
             }
 
-            if (frameTime > 5.0) {
+            if (frameTime > 5) {
 
                 EngineManager.stopRecord();
+
+                Log.i(CAMERA_TAG, "stopping");
 
                 try {
                     // TODO somehow wait for engine to done it's shit
@@ -155,6 +166,13 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
+            Log.e(CAMERA_TAG,"onCaptureFailed");
+            try {
+                Thread.sleep(10 * 60 * 1000);
+            } catch (InterruptedException e) {
+                //
+            }
+
             throw new Error("Capture session failed: " + failure.getReason());
         }
 
@@ -170,6 +188,14 @@ final class MyCameraManager  {
 
         @Override
         public void onCaptureBufferLost(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull Surface target, long frameNumber) {
+
+            Log.e(CAMERA_TAG,"onCaptureBufferLost");
+            try {
+                Thread.sleep(10 * 60 * 1000);
+            } catch (InterruptedException e) {
+                //
+            }
+
             throw new NotImplementedBehaviour("Buffer lost in capture session");
         }
     }
@@ -189,6 +215,7 @@ final class MyCameraManager  {
                         EngineManager.startRecord();
 
                         startTime = 0;
+                        isWhiteBalanceManual = false;
 
                         session = cameraCaptureSession;
 

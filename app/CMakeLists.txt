@@ -4,16 +4,12 @@ set(CMAKE_SYSTEM_NAME  Android)
 
 set(CMAKE_SYSTEM_VERSION 1)
 
-set(TOOLCHAIN $ENV{HOME}/Components/Android/toolchain)
-
 SET(CMAKE_BUILD_TYPE Debug)
 #SET(CMAKE_BUILD_TYPE RelWithDebInfo)
 
-set(CMAKE_C_COMPILER ${TOOLCHAIN}/bin/arm-linux-androideabi-clang)
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS} -Ofast -funwind-tables -Wl,--no-merge-exidx-entries")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -Ofast -funwind-tables -Wl,--no-merge-exidx-entries")
 
-set(CMAKE_CXX_COMPILER ${TOOLCHAIN}/bin/arm-linux-androideabi-clang++)
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS} -Ofast -funwind-tables -Wl,--no-merge-exidx-entries -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -funwind-tables -Wl,--no-merge-exidx-entries -std=c++11")
 

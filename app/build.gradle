@@ -5,7 +5,7 @@ android {
         config {
             keyAlias 'key0'
             keyPassword '3Y4qVBoQqXg4iMYn'
-            storeFile file('/home/gal/Projects/PeopleWatcher/Key.jks')
+            storeFile file('../Key.jks')
             storePassword '3Y4qVBoQqXg4iMYn'
         }
     }
@@ -21,7 +21,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-fexceptions"
-                arguments "-DANDROID_PLATFORM=android-23"
+                arguments "-DANDROID_PLATFORM=android-23", "-DANDROID_TOOLCHAIN=clang"
             }
         }
         ndk {

@@ -6,7 +6,11 @@ import java.nio.ByteBuffer;
 
 final class EngineManager {
 
-    static private native void initialize(String sdCardPath);
+    static private native void initializeEngine(String sdCardPath);
+
+    static public void initializeEngine() {
+        initializeEngine(Environment.getExternalStorageDirectory().getAbsolutePath());
+    }
 
     static public native void startRecord();
 
@@ -15,17 +19,5 @@ final class EngineManager {
 
     static public native void stopRecord();
 
-    static private native void workerThreadLoop();
-
-    static public void initialize() {
-
-        initialize(Environment.getExternalStorageDirectory().getAbsolutePath());
-
-        new Thread() {
-            @Override
-            public void run() {
-                workerThreadLoop();
-            }
-        }.start();
-    }
+    static public native void finalizeEngine();
 }

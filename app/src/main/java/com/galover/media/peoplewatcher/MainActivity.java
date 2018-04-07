@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
 
     void startup() {
 
-        EngineManager.initialize();
+        EngineManager.initializeEngine();
 
         setupLogToFile();
 

@@ -7,7 +7,7 @@
 
 #include "Engine.h"
 
-extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_initialize(
+extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_initializeEngine(
         JNIEnv *env, jobject /*this*/, jstring sdCardPath) {
 
     try {
@@ -18,6 +18,22 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
             Engine::getInstance().initialize(sdCardPathStr);
 
             env->ReleaseStringUTFChars(sdCardPath, sdCardPathStr);
+
+        } COFFEE_CATCH() {
+            coffeecatch_throw_exception(env);
+        } COFFEE_END();
+    } catch(...) {
+        swallow_cpp_exception_and_throw_java(env);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_finalizeEngine(
+        JNIEnv *env, jobject /*this*/) {
+
+    try {
+        COFFEE_TRY() {
+
+            Engine::getInstance().finalize();
 
         } COFFEE_CATCH() {
             coffeecatch_throw_exception(env);
@@ -71,21 +87,6 @@ extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineMan
         COFFEE_TRY() {
 
             Engine::getInstance().stopRecord();
-
-        } COFFEE_CATCH() {
-            coffeecatch_throw_exception(env);
-        } COFFEE_END();
-    } catch(...) {
-        swallow_cpp_exception_and_throw_java(env);
-    }
-}
-
-extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_workerThreadLoop(
-        JNIEnv *env, jobject /*this*/) {
-    try {
-        COFFEE_TRY() {
-
-            Engine::getInstance().workerThreadLoop(env);
 
         } COFFEE_CATCH() {
             coffeecatch_throw_exception(env);

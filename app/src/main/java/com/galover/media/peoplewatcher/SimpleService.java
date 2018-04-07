@@ -9,6 +9,7 @@ import android.app.PendingIntent;
 public class SimpleService extends Service {
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onCreate() {
         Intent notificationIntent = new Intent(this, MainActivity.class);
 

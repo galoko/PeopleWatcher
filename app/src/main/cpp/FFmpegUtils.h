@@ -18,12 +18,21 @@ enum RecordType {
     Record
 };
 
-#define USE_FFMPEG_ENCODER
-#define USE_X264
+enum EncoderType {
+    x264,
+    openh264,
+    MediaCodec
+};
+
+typedef void (*io_callback_func)(const char* filePath, AVIOContext **pb);
 
 class FFmpegEncoder
 {
 private:
+    // encoder type
+    bool useFFmpeg;
+
+    io_callback_func io_callback;
 
     // timebase
     AVRational input_time_base, encoder_time_base;
@@ -33,15 +42,13 @@ private:
     AVStream *video_stream;
     bool isHeaderWritten;
 
-#ifdef  USE_FFMPEG_ENCODER
     // ffmpeg codec
     AVCodecContext *video_codec_ctx;
     AVDictionary *video_params;
-#else
+
     // hardware codec
     AMediaFormat* format;
     AMediaCodec* codec;
-#endif
 
     // filters
     AVFilterGraph *video_filter_graph;
@@ -54,11 +61,12 @@ private:
 
     void free(void);
 public:
-    void startRecord(RecordType recordType, int width, int height, const char *filePath);
+    void startRecord(RecordType recordType, EncoderType encoderType, int width, int height,
+                     const char *filePath, io_callback_func io_callback);
     void writeFrame(AVFrame* frame);
     void closeRecord(void);
 
-    static void TestMemoryLeak(RecordType recordType, int width, int height, const char *filePath);
+    static void TestMemoryLeak(RecordType recordType, EncoderType encoderType, int width, int height, const char *filePath);
 };
 
 #endif //PEOPLEWATCHER_FFMPEGUTILS_H

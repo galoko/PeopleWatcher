@@ -147,19 +147,15 @@ final class MyCameraManager  {
 
             if (frameTime > 1 * 60) {
 
-                EngineManager.stopRecord();
-
                 Log.i(CAMERA_TAG, "stopping");
 
-                try {
-                    // TODO somehow wait for engine to done it's shit
+                EngineManager.stopRecord();
 
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    //
-                }
+                Log.i(CAMERA_TAG, "finalizing");
 
-                context.finish();
+                EngineManager.finalizeEngine();
+
+                context.finishAndRemoveTask();
                 System.exit(0);
             }
         }

@@ -171,7 +171,7 @@ void benchmark_convert_yuv420_888_to_yuv420p(void) {
 
         double elapsed = getTime() - startTime;
 
-        print_log(ANDROID_LOG_INFO, BENCHMARK_TAG, "%f\n", elapsed);
+        print_log(ANDROID_LOG_INFO, BENCHMARK_TAG, "%f", elapsed);
     }
 
     av_frame_free(&yuv_frame);

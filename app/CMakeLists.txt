@@ -23,7 +23,10 @@ add_library(engine SHARED
     src/main/c/coffeecatch.c
     src/main/cpp/coffeejni.cpp
     src/main/cpp/FFmpegUtils.cpp
-    src/main/c/generalUtils.c)
+    src/main/c/generalUtils.c
+    src/main/cpp/Encoder.cpp
+    src/main/cpp/AsyncIO.cpp
+    src/main/cpp/MotionDetection.cpp)
 
 target_include_directories(engine PRIVATE
                            ${PREBUILT_DIR}/include

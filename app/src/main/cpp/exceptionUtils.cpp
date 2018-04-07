@@ -3,9 +3,6 @@
 #include <stdexcept>
 #include <ios>
 #include <jni.h>
-#include <string.h>
-#include <cxxabi.h>
-#include <stdlib.h>
 
 #include "coffeecatch.h"
 #include "coffeejni.h"

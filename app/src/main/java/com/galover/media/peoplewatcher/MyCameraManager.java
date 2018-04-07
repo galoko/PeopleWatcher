@@ -42,7 +42,6 @@ final class MyCameraManager  {
 
         context = activity;
         frame = ImageReader.newInstance(WIDTH, HEIGHT, ImageFormat.YUV_420_888, 10);
-        // frame.setOnImageAvailableListener(frameListener, null);
         frameSurface = frame.getSurface();
         manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
     }
@@ -145,7 +144,7 @@ final class MyCameraManager  {
                 }
             }
 
-            if (frameTime > 1 * 60) {
+            if (frameTime > 5) {
 
                 Log.i(CAMERA_TAG, "stopping");
 

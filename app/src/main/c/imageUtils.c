@@ -148,7 +148,7 @@ void convert_yuv420_888_to_yuv420p(uint8_t* dataY, uint8_t* dataU, uint8_t* data
 
 #pragma clang optimize off
 
-#define WIDTH 640
+#define WIDTH  640
 #define HEIGHT 480
 
 void benchmark_convert_yuv420_888_to_yuv420p(void) {

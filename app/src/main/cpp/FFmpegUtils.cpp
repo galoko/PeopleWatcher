@@ -136,8 +136,11 @@ void FFmpegEncoder::startRecord(RecordType recordType, EncoderType encoderType, 
 
     // creating actual file on disk
 
-    if (io_callback)
+    if (io_callback) {
         io_callback(filePath, &format_ctx->pb);
+        if (format_ctx->pb == NULL)
+            throw new std::runtime_error("IO callback couldn't create IO context");
+    }
     else
         av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE));
 

@@ -37,7 +37,7 @@ public class MainActivity extends Activity {
             logFile.createNewFile();
 
             // Runtime.getRuntime().exec("logcat -G 64KB");
-            // Runtime.getRuntime().exec("logcat -c");
+            Runtime.getRuntime().exec("logcat -c");
             Runtime.getRuntime().exec("logcat ImageReader_JNI:S -f " + logFile.getAbsolutePath());
         } catch (IOException e) {
             throw new Error("Couldn't setup log to file");

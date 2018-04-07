@@ -63,8 +63,10 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
     my_assert(video_params == NULL);
 #ifdef USE_X264
     av_dict_set(&video_params, "preset", "ultrafast", 0);
-    av_dict_set(&video_params, "tune", "stillimage", 0);
-    av_dict_set(&video_params, "x264-params", "qp=30:cabac=0:deblock=1:subme=1:ref=0:b-adapt=0:me=dia", 0);
+    // av_dict_set(&video_params, "tune", "stillimage", 0);
+    av_dict_set(&video_params, "crf", "0", 0);
+    av_dict_set(&video_params, "x264-params", "scenecut=0:subme=0:trellis=0:me=dia", 0);
+    // video_codec_ctx->bit_rate = 1 * 1000 * 1000;
 #else
     av_dict_set(&video_params, "profile", "baseline", 0);
     av_dict_set(&video_params, "cabac", "0", 0);
@@ -131,7 +133,7 @@ void FFmpegEncoder::startRecord(RecordType recordType, int width, int height, co
 
     // creating actual file on disk
 
-    av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK));
+    av_check_error(avio_open(&format_ctx->pb, filePath, AVIO_FLAG_WRITE));
 
 #ifdef USE_FFMPEG_ENCODER
     // copy extra data from codec if any

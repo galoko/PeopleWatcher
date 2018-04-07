@@ -18,7 +18,7 @@ extern "C" {
 
 #define WIDTH 640
 #define HEIGHT 480
-#define FRAME_BUFFER_SIZE 20 * 8 // 20 fps for 8 seconds
+#define FRAME_BUFFER_SIZE 20 * 8 // 20 fps for 8 seconds (~73 MB buffer)
 
 Engine::Engine() : frames(FRAME_BUFFER_SIZE) {
 

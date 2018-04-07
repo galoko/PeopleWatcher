@@ -18,7 +18,7 @@ enum RecordType {
     Record
 };
 
-#undef USE_FFMPEG_ENCODER
+#define USE_FFMPEG_ENCODER
 #define USE_X264
 
 class FFmpegEncoder

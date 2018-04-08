@@ -29,16 +29,16 @@ private:
         FinalizeEncoder
     };
 
-    struct FrameOperation {
-        AVFrame *frame;
+    struct EncoderOperation {
         FrameOperationType  operationType;
+        AVFrame *frame;
     };
 
     int initialized;
 
     std::string sdCardPath;
 
-    BlockingReaderWriterQueue<FrameOperation> pendingEncoderOperations;
+    BlockingReaderWriterQueue<EncoderOperation> pendingOperations;
 
     FFmpegEncoder encoder;
     FILE *io_file;
@@ -58,12 +58,15 @@ private:
     static void io_callback_create(const char *filePath, AVIOContext **pb);
     static int io_callback_write(void *opaque, uint8_t *buf, int buf_size);
 public:
+    static const int WIDTH  = 640;
+    static const int HEIGHT = 480;
+
     void initialize(const char *sdCardPath);
 
     void startRecord(void);
     void stopRecord(void);
-    void sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
-                   int strideY, int strideU, int strideV, long long timestamp);
+    bool canAcceptFrame(void);
+    void sendFrame(AVFrame* yuvFrame);
     void terminate(void);
 };
 

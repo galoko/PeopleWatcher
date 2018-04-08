@@ -1,9 +1,5 @@
 #include "Encoder.h"
 
-extern "C" {
-#include "imageUtils.h"
-}
-
 #include "log.h"
 #include "exceptionUtils.h"
 
@@ -11,11 +7,9 @@ extern "C" {
 
 #define ENCODER_TAG "PW_ENCODER"
 
-#define WIDTH 640
-#define HEIGHT 480
-#define FRAME_BUFFER_SIZE 20 * 8 // 20 fps for 8 seconds (~73 MB buffer)
+#define FRAME_BUFFER_SIZE 20 * 3 // 20 fps for 3 seconds (~28 MB buffer)
 
-Encoder::Encoder(void) : pendingEncoderOperations(FRAME_BUFFER_SIZE) {
+Encoder::Encoder(void) : pendingOperations(FRAME_BUFFER_SIZE) {
 }
 
 void Encoder::initialize(const char *sdCardPath) {
@@ -29,7 +23,7 @@ void Encoder::initialize(const char *sdCardPath) {
 
     avfilter_register_all();
 
-    pthread_create(&thread, NULL, thread_entrypoint, NULL);
+    pthread_check_error(pthread_create(&thread, NULL, thread_entrypoint, NULL));
 
     this->initialized = 1;
 }
@@ -43,52 +37,39 @@ void Encoder::startRecord(void) {
 
 void Encoder::stopRecord(void) {
 
-    FrameOperation operation = { };
+    EncoderOperation operation = { };
     operation.operationType = CloseRecord;
 
-    pendingEncoderOperations.enqueue(operation);
+    pendingOperations.enqueue(operation);
 }
 
-void Encoder::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
-                       int strideY, int strideU, int strideV, long long timestamp) {
+bool Encoder::canAcceptFrame(void) {
 
-    if (this->pendingEncoderOperations.size_approx() < FRAME_BUFFER_SIZE) {
+    return this->pendingOperations.size_approx() < FRAME_BUFFER_SIZE;
+}
 
-        AVFrame *yuv_frame = av_frame_alloc();
-        yuv_frame->width = WIDTH;
-        yuv_frame->height = HEIGHT;
-        yuv_frame->format = AV_PIX_FMT_YUV420P;
-        yuv_frame->pts = timestamp;
-        av_check_error(av_frame_get_buffer(yuv_frame, 32));
+void Encoder::sendFrame(AVFrame* yuvFrame) {
 
-        convert_yuv420_888_to_yuv420p(dataY, dataU, dataV, strideY, strideU, strideV, yuv_frame);
+    EncoderOperation operation = { };
+    operation.operationType = EncodeFrame;
+    operation.frame = yuvFrame;
 
-        FrameOperation operation = { };
-        operation.frame = yuv_frame;
-        operation.operationType = EncodeFrame;
+    if (!pendingOperations.try_enqueue(operation)) {
 
-        if (!pendingEncoderOperations.try_enqueue(operation)) {
+        print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Frame drop");
 
-            // why the fuck this happened?
-
-            av_frame_free(&yuv_frame);
-
-            throw new std::runtime_error("Couldn't enqueue YUV frame");
-        }
-    }
-    else {
-        print_log(ANDROID_LOG_WARN, ENCODER_TAG, "YUV frame drop");
+        av_frame_free(&yuvFrame);
     }
 }
 
 void Encoder::terminate(void) {
 
-    FrameOperation operation = { };
+    EncoderOperation operation = { };
     operation.operationType = FinalizeEncoder;
 
-    pendingEncoderOperations.enqueue(operation);
+    pendingOperations.enqueue(operation);
 
-    pthread_join(thread, NULL);
+    pthread_check_error(pthread_join(thread, NULL));
 }
 
 // start/close implementations
@@ -119,26 +100,26 @@ void Encoder::threadLoop(void) {
 
     while (true) {
 
-        FrameOperation operation;
+        EncoderOperation operation;
 
-        this->pendingEncoderOperations.wait_dequeue(operation);
+        this->pendingOperations.wait_dequeue(operation);
 
         if (operation.operationType == EncodeFrame) {
 
-            AVFrame *yuv_frame = operation.frame;
+            AVFrame *yuvFrame = operation.frame;
 
             // auto start
             if (startTime == 0) {
 
-                startTime = yuv_frame->pts;
+                startTime = yuvFrame->pts;
 
                 startEncoding();
             }
 
-            my_assert(yuv_frame->pts >= startTime);
-            yuv_frame->pts -= startTime;
+            my_assert(yuvFrame->pts >= startTime);
+            yuvFrame->pts -= startTime;
 
-            encoder.writeFrame(yuv_frame);
+            encoder.writeFrame(yuvFrame);
 
         } else if (operation.operationType == CloseRecord || operation.operationType == FinalizeEncoder) {
 
@@ -153,7 +134,7 @@ void Encoder::threadLoop(void) {
         }
     }
 
-    if (this->pendingEncoderOperations.size_approx() > 0)
+    if (this->pendingOperations.size_approx() > 0)
         print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Encoder: Still have pending operations after finalization");
 
     if (this->io_buffer != NULL || this->io_file != NULL)

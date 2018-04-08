@@ -26,7 +26,8 @@ add_library(engine SHARED
     src/main/c/generalUtils.c
     src/main/cpp/Encoder.cpp
     src/main/cpp/AsyncIO.cpp
-    src/main/cpp/MotionDetection.cpp)
+    src/main/cpp/MotionDetector.cpp
+    src/main/c/thpool.c)
 
 target_include_directories(engine PRIVATE
                            ${PREBUILT_DIR}/include
@@ -34,32 +35,31 @@ target_include_directories(engine PRIVATE
                            ./src/main/c)
 
 target_link_libraries(engine
-    ${PREBUILT_DIR}/lib/libswscale.a
-    ${PREBUILT_DIR}/lib/libavfilter.a
-    ${PREBUILT_DIR}/lib/libavformat.a
-    ${PREBUILT_DIR}/lib/libavcodec.a
-    ${PREBUILT_DIR}/lib/libavutil.a
-    ${PREBUILT_DIR}/lib/libcpufeatures.a
-    ${PREBUILT_DIR}/lib/libfreetype.a
-    ${PREBUILT_DIR}/lib/liblibprotobuf.a
-    ${PREBUILT_DIR}/lib/libopencv_bgsegm.a
-    ${PREBUILT_DIR}/lib/libopencv_calib3d.a
-    ${PREBUILT_DIR}/lib/libopencv_core.a
-    ${PREBUILT_DIR}/lib/libopencv_features2d.a
-    ${PREBUILT_DIR}/lib/libopencv_flann.a
-    ${PREBUILT_DIR}/lib/libopencv_hfs.a
-    ${PREBUILT_DIR}/lib/libopencv_highgui.a
-    ${PREBUILT_DIR}/lib/libopencv_imgcodecs.a
-    ${PREBUILT_DIR}/lib/libopencv_imgproc.a
-    ${PREBUILT_DIR}/lib/libopencv_optflow.a
-    ${PREBUILT_DIR}/lib/libopencv_video.a
-    ${PREBUILT_DIR}/lib/libopencv_ximgproc.a
-    ${PREBUILT_DIR}/lib/libopencv_xphoto.a
-    ${PREBUILT_DIR}/lib/libtegra_hal.a
-    ${PREBUILT_DIR}/lib/libx264.a
-    ${PREBUILT_DIR}/lib/libopenh264.a
-    )
-
-target_link_libraries(engine
                       mediandk
-                      log)
+                      log
+                      z
+                      ${PREBUILT_DIR}/lib/libswscale.a
+                      ${PREBUILT_DIR}/lib/libavfilter.a
+                      ${PREBUILT_DIR}/lib/libavformat.a
+                      ${PREBUILT_DIR}/lib/libavcodec.a
+                      ${PREBUILT_DIR}/lib/libavutil.a
+                      ${PREBUILT_DIR}/lib/libfreetype.a
+                      ${PREBUILT_DIR}/lib/libopencv_optflow.a
+                      ${PREBUILT_DIR}/lib/libopencv_highgui.a
+                      ${PREBUILT_DIR}/lib/libopencv_imgcodecs.a
+                      ${PREBUILT_DIR}/lib/libopencv_video.a
+                      ${PREBUILT_DIR}/lib/libopencv_ximgproc.a
+                      ${PREBUILT_DIR}/lib/libopencv_xphoto.a
+                      ${PREBUILT_DIR}/lib/libopencv_bgsegm.a
+                      ${PREBUILT_DIR}/lib/libopencv_calib3d.a
+                      ${PREBUILT_DIR}/lib/libopencv_features2d.a
+                      ${PREBUILT_DIR}/lib/libopencv_flann.a
+                      ${PREBUILT_DIR}/lib/libopencv_hfs.a
+                      ${PREBUILT_DIR}/lib/libopencv_imgproc.a
+                      ${PREBUILT_DIR}/lib/libopencv_core.a
+                      ${PREBUILT_DIR}/lib/libtegra_hal.a
+                      ${PREBUILT_DIR}/lib/libcpufeatures.a
+                      ${PREBUILT_DIR}/lib/liblibprotobuf.a
+                      ${PREBUILT_DIR}/lib/libx264.a
+                      ${PREBUILT_DIR}/lib/libopenh264.a
+                      )

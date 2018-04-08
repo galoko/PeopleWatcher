@@ -25,8 +25,8 @@ private:
     };
 
     struct AsyncIOOperation {
-        FILE *file;
         AsyncIOOperationType operationType;
+        FILE *file;
         void *buffer;
         size_t size;
     };

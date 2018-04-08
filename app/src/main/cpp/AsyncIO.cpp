@@ -1,6 +1,7 @@
 #include "AsyncIO.h"
 
 #include "log.h"
+#include "exceptionUtils.h"
 
 #include <cstring>
 
@@ -18,13 +19,13 @@ void AsyncIO::initialize(void) {
     if (this->initialized)
         return;
 
-    pthread_mutex_init(&mutex, NULL);
-    pthread_cond_init(&cond, NULL);
+    pthread_check_error(pthread_mutex_init(&mutex, NULL));
+    pthread_check_error(pthread_cond_init(&cond, NULL));
 
-    pthread_mutex_lock(&mutex);
-    pthread_create(&thread, NULL, thread_entrypoint, NULL);
-    pthread_cond_wait(&cond, &mutex);
-    pthread_mutex_unlock(&mutex);
+    pthread_check_error(pthread_mutex_lock(&mutex));
+    pthread_check_error(pthread_create(&thread, NULL, thread_entrypoint, NULL));
+    pthread_check_error(pthread_cond_wait(&cond, &mutex));
+    pthread_check_error(pthread_mutex_unlock(&mutex));
 
     this->initialized = 1;
 }
@@ -49,10 +50,10 @@ void* AsyncIO::thread_entrypoint(void* opaque) {
 
 void AsyncIO::threadLoop(void) {
 
-    pthread_mutex_lock(&mutex);
+    pthread_check_error(pthread_mutex_lock(&mutex));
     allocateBuffers();
-    pthread_cond_signal(&cond);
-    pthread_mutex_unlock(&mutex);
+    pthread_check_error(pthread_cond_signal(&cond));
+    pthread_check_error(pthread_mutex_unlock(&mutex));
 
     while (true) {
 
@@ -126,5 +127,5 @@ void AsyncIO::terminate(void) {
 
     pendingIOOperations.enqueue(operation);
 
-    pthread_join(thread, NULL);
+    pthread_check_error(pthread_join(thread, NULL));
 }

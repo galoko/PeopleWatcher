@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <ios>
 #include <jni.h>
+#include <string>
 
 #include "coffeecatch.h"
 #include "coffeejni.h"
@@ -62,4 +63,15 @@ void my_assert(bool condition) {
 
     if (!condition)
         raise(SIGABRT);
+}
+
+void pthread_check_error(int ret) {
+
+    if (ret != 0) {
+
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), "pthread error: %d", ret);
+
+        throw new std::runtime_error(std::string(error_msg));
+    }
 }

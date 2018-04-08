@@ -4,6 +4,10 @@
 #include <string>
 #include <inttypes.h>
 
+extern "C" {
+#include "libavutil/frame.h"
+}
+
 class Engine {
 public:
     static Engine& getInstance() {
@@ -18,6 +22,9 @@ private:
     Engine(void);
 
     int initialized;
+
+    static void motionDetectorCallback(AVFrame *yuvFrame);
+    void motionDetected(AVFrame* yuvFrame);
 public:
     void initialize(const char* sdCardPathStr);
     void finalize(void);

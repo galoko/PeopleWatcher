@@ -1,7 +1,7 @@
 #ifndef PEOPLEWATCHER_ENCODER_H
 #define PEOPLEWATCHER_ENCODER_H
 
-#include "readerwriterqueue.h"
+#include "blockingconcurrentqueue.h"
 #include "FFmpegUtils.h"
 
 extern "C" {
@@ -24,6 +24,7 @@ private:
     Encoder(void);
 
     enum FrameOperationType {
+        StartRecord,
         EncodeFrame,
         CloseRecord,
         FinalizeEncoder
@@ -38,7 +39,7 @@ private:
 
     std::string sdCardPath;
 
-    BlockingReaderWriterQueue<EncoderOperation> pendingOperations;
+    BlockingConcurrentQueue<EncoderOperation> pendingOperations;
 
     FFmpegEncoder encoder;
     FILE *io_file;
@@ -52,11 +53,11 @@ private:
     void startEncoding(void);
     void stopEncoding(void);
 
-    void createIO(const char *filePath, AVIOContext **pb);
-    void closeIO(void);
+    AVIOContext* createIO(const char *filePath);
+    void closeIO(AVIOContext **pb);
 
-    static void io_callback_create(const char *filePath, AVIOContext **pb);
-    static int io_callback_write(void *opaque, uint8_t *buf, int buf_size);
+    static void* encoder_callback(RequestType request, const void* param);
+    static int io_write_callback(void *opaque, uint8_t *buf, int buf_size);
 public:
     static const int WIDTH  = 640;
     static const int HEIGHT = 480;

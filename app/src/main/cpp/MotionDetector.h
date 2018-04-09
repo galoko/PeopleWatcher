@@ -32,6 +32,7 @@ private:
     MotionDetector(void);
 
     enum DetectorOperationType {
+        FrameSent,
         MotionDetected,
         ResetDetector,
         FinalizeDetector
@@ -46,6 +47,7 @@ private:
     struct DetectorOperation {
         DetectorOperationType operationType;
         DetectionRequest *request;
+        AVFrame* frame;
     };
 
     static const int MOTION_PROPAGATION_TIME = 150 * 1000 * 1000; // 150 ms in nanonseconds
@@ -64,11 +66,6 @@ private:
 
     MotionDetectorCallback callback;
 
-    // variables for generating detection requests in sendFrame
-
-    AVFrame *frame;
-    long long nextSequenceNum;
-
     // thread pool stuff
 
     threadpool pool;
@@ -77,9 +74,15 @@ private:
     // separate thread variables
 
     BlockingConcurrentQueue<DetectorOperation> pendingOperations;
+
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
     pthread_t thread;
 
-    long long currentSequenceNum, lastMotionTime;
+    AVFrame *frame;
+    long long currentSequenceNum, nextSequenceNum;
+
+    long long lastFrameTime, lastMotionTime;
     std::vector<DetectionRequest*> sequentialOperations;
     std::queue<AVFrame*> bufferedFrames;
 
@@ -88,6 +91,9 @@ private:
 
     static void pool_worker(void* opaque);
     void PoolWorker(DetectionRequest *request);
+
+    void addFrameToPool(AVFrame* yuvFrame);
+    void resetDetector(void);
 
     AVFrame* generateGrayDownscaleCrop(AVFrame *yuvFrame);
     bool detectMotion(AVFrame *frame, AVFrame *nextFrame);
@@ -101,7 +107,7 @@ public:
 
     bool canAcceptFrame(void);
     void sendFrame(AVFrame* yuvFrame);
-    void resetDetector(void);
+    void flush(void);
     void terminate(void);
 };
 

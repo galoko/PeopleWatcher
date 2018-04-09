@@ -144,7 +144,7 @@ final class MyCameraManager  {
                 }
             }
 
-            if (frameTime > 3 * 60) {
+            if (frameTime > 30) {
 
                 Log.i(CAMERA_TAG, "stopping");
 
@@ -154,7 +154,12 @@ final class MyCameraManager  {
 
                 EngineManager.finalizeEngine();
 
+                Log.i(CAMERA_TAG, "finalized");
+
                 context.finishAndRemoveTask();
+
+                Log.i(CAMERA_TAG, "finished");
+
                 System.exit(0);
             }
         }
@@ -206,6 +211,8 @@ final class MyCameraManager  {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     try {
+
+                        Log.i(CAMERA_TAG, "camera configured");
 
                         EngineManager.startRecord();
 

@@ -14,11 +14,13 @@ using namespace cv;
 
 #define MOTION_DETECTOR_TAG "PW_MOTION_DETECTOR"
 
-#define FRAME_BUFFER_SIZE (20 * 1) // 20 fps for 3 seconds (~9 MB buffer)
+#define FRAME_BUFFER_SIZE (20 * 3) // 20 fps for 3 seconds (~29 MB buffer)
 #define MAX_SCHEDULED_DETECTIONS (FRAME_BUFFER_SIZE / 2)
-#define THREADS_IN_THREAD_POOL 1
+#define THREADS_IN_THREAD_POOL 3
 
-MotionDetector::MotionDetector(void) : pendingOperations(FRAME_BUFFER_SIZE, THREADS_IN_THREAD_POOL + 1, THREADS_IN_THREAD_POOL + 1) {
+MotionDetector::MotionDetector(void) : pendingOperations(FRAME_BUFFER_SIZE,
+                                                         1 + THREADS_IN_THREAD_POOL,
+                                                         1 + THREADS_IN_THREAD_POOL) {
 }
 
 void MotionDetector::initialize(const char *sdCardPath, MotionDetectorCallback callback) {
@@ -34,6 +36,9 @@ void MotionDetector::initialize(const char *sdCardPath, MotionDetectorCallback c
     if (pool == NULL)
         throw new std::runtime_error("Couldn't allocate thread pool");
 
+    pthread_check_error(pthread_mutex_init(&mutex, NULL));
+    pthread_check_error(pthread_cond_init(&cond, NULL));
+
     pthread_check_error(pthread_create(&thread, NULL, thread_entrypoint, NULL));
 
     this->initialized = 1;
@@ -46,6 +51,64 @@ bool MotionDetector::canAcceptFrame(void) {
 
 // send frame directly to the thread pool
 void MotionDetector::sendFrame(AVFrame* yuvFrame) {
+
+    DetectorOperation operation = { };
+    operation.operationType = FrameSent;
+    operation.frame = yuvFrame;
+
+    if (!pendingOperations.try_enqueue(operation)) {
+
+        print_log(ANDROID_LOG_WARN, MOTION_DETECTOR_TAG, "Frame drop at sendFrame");
+
+        av_frame_free(&yuvFrame);
+    }
+}
+
+void MotionDetector::flush(void) {
+
+    thpool_wait(pool);
+
+    pthread_check_error(pthread_mutex_lock(&mutex));
+    resetDetector();
+    pthread_check_error(pthread_cond_wait(&cond, &mutex));
+    pthread_check_error(pthread_mutex_unlock(&mutex));
+}
+
+void MotionDetector::resetDetector(void) {
+
+    DetectorOperation operation = { };
+    operation.operationType = ResetDetector;
+
+    pendingOperations.enqueue(operation);
+}
+
+void MotionDetector::terminate(void) {
+
+    flush();
+
+    thpool_destroy(pool);
+    pool = NULL;
+
+    DetectorOperation operation = { };
+    operation.operationType = FinalizeDetector;
+
+    pendingOperations.enqueue(operation);
+
+    pthread_check_error(pthread_join(thread, NULL));
+}
+
+// processing
+
+void MotionDetector::addFrameToPool(AVFrame* yuvFrame) {
+
+    if (lastFrameTime != 0) {
+
+        long long elapsed = yuvFrame->pts - lastFrameTime;
+
+        print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "frame time: %lld ms", elapsed / (1000 * 1000));
+    }
+
+    lastFrameTime = yuvFrame->pts;
 
     if (pool == NULL) {
 
@@ -98,33 +161,6 @@ void MotionDetector::sendFrame(AVFrame* yuvFrame) {
 
     nextSequenceNum++;
 }
-
-void MotionDetector::resetDetector(void) {
-
-    av_frame_free(&frame);
-    nextSequenceNum = 0;
-
-    DetectorOperation operation = { };
-    operation.operationType = ResetDetector;
-
-    pendingOperations.enqueue(operation);
-}
-
-void MotionDetector::terminate(void) {
-
-    thpool_wait(pool);
-    thpool_destroy(pool);
-    pool = NULL;
-
-    DetectorOperation operation = { };
-    operation.operationType = FinalizeDetector;
-
-    pendingOperations.enqueue(operation);
-
-    pthread_check_error(pthread_join(thread, NULL));
-}
-
-// processing
 
 void MotionDetector::processDetectedMotion(DetectionRequest *request) {
 
@@ -186,8 +222,6 @@ void MotionDetector::processFrame(AVFrame *frame, bool haveMotion) {
                     callback(latestFrame);
                 else
                     av_frame_free(&latestFrame);
-
-                av_frame_free(&latestFrame);
             } else
                 break;
         }
@@ -246,13 +280,19 @@ AVFrame* MotionDetector::generateGrayDownscaleCrop(AVFrame *yuvFrame) {
 
 bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
+    int64 startTime = getTickCount();
+
     Mat img(frame->height, frame->width, CV_8UC1, frame->data[0],
             (size_t) frame->linesize[0]);
     Mat nextImg(nextFrame->height, nextFrame->width, CV_8UC1, nextFrame->data[0], (size_t) nextFrame->linesize[0]);
 
     Mat flow;
 
-    int64 startTime = getTickCount();
+    img.convertTo(img, -1, 0.5, 0.0);
+    nextImg.convertTo(nextImg, -1, 0.5, 0.0);
+
+    GaussianBlur(img, img, Size(21, 21), 0.0);
+    GaussianBlur(nextImg, nextImg, Size(21, 21), 0.0);
 
     calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 10, 1, 7, 1.2, 0);
 
@@ -260,9 +300,9 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
     double elapsed = (endTime - startTime) / getTickFrequency();
 
-    print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "calcOpticalFlowFarneback takes %d ms", (int) (elapsed * 1000.0));
+    print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "Motion detection took %d ms", (int) (elapsed * 1000.0));
 
-    return false;
+    return true;
 }
 
 void MotionDetector::pool_worker(void* opaque) {
@@ -314,18 +354,19 @@ void MotionDetector::threadLoop(void) {
 
         this->pendingOperations.wait_dequeue(operation);
 
-        if (operation.operationType == MotionDetected) {
+        if (operation.operationType == FrameSent) {
+
+            addFrameToPool(operation.frame);
+
+        } else if (operation.operationType == MotionDetected) {
 
             processDetectedMotion(operation.request);
 
-        } else if (operation.operationType == ResetDetector) {
+        } else if (operation.operationType == ResetDetector || operation.operationType == FinalizeDetector) {
 
-            lastMotionTime = 0;
+            pthread_check_error(pthread_mutex_lock(&mutex));
 
-            for (DetectionRequest *request : sequentialOperations)
-                free_detection_request(&request);
-            sequentialOperations.clear();
-
+            // deleting frames that awaits motion that will not happen at this point
             while (!bufferedFrames.empty()) {
 
                 AVFrame* frame = bufferedFrames.front();
@@ -334,11 +375,45 @@ void MotionDetector::threadLoop(void) {
                 av_frame_free(&frame);
             }
 
+            // deleting non sequential requests that awaits other requests in order to become sequential
+
+            /*
+            since reset can only occur after flush, i.e. all thread pool tasks are finished at this point,
+            then all sequential requests should be sorted into completely sequential stream of requests and
+            then be processed fully, so we have no need to destroy any requests in normal circumstances
+             */
+
+            for (DetectionRequest *request : sequentialOperations) {
+
+                print_log(ANDROID_LOG_WARN, MOTION_DETECTOR_TAG, "unsorted request found after flush");
+
+                free_detection_request(&request);
+            }
+            sequentialOperations.clear();
+
+            // deleting frames that awaits to become request
+
+            av_frame_free(&frame);
+
+            // check everything to be empty
+
             my_assert(sequentialOperations.empty());
             my_assert(bufferedFrames.empty());
 
-        } else if (operation.operationType == FinalizeDetector)
-            break;
+            // resetting sequence numbers and time variables
+
+            currentSequenceNum = 0;
+            nextSequenceNum = 0;
+
+            lastFrameTime = 0;
+            lastMotionTime = 0;
+
+            pthread_check_error(pthread_cond_signal(&cond));
+            pthread_check_error(pthread_mutex_unlock(&mutex));
+
+            if (operation.operationType == FinalizeDetector)
+                break;
+        }
     }
 
     if (this->pendingOperations.size_approx() > 0)

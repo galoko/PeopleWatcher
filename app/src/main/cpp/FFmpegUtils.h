@@ -24,7 +24,12 @@ enum EncoderType {
     MediaCodec
 };
 
-typedef void (*io_callback_func)(const char* filePath, AVIOContext **pb);
+enum RequestType {
+    CreateIO,
+    CloseIO
+};
+
+typedef void* (*encoder_callback_func)(RequestType request, const void* param);
 
 class FFmpegEncoder
 {
@@ -32,7 +37,7 @@ private:
     // encoder type
     bool useFFmpeg;
 
-    io_callback_func io_callback;
+    encoder_callback_func callback;
 
     // timebase
     AVRational input_time_base, encoder_time_base;
@@ -62,7 +67,7 @@ private:
     void free(void);
 public:
     void startRecord(RecordType recordType, EncoderType encoderType, int width, int height,
-                     const char *filePath, io_callback_func io_callback);
+                     const char *filePath, encoder_callback_func callback);
     void writeFrame(AVFrame* frame);
     void closeRecord(void);
 

@@ -10,7 +10,7 @@
 #define IO_BUFFERS_COUNT 256
 
 AsyncIO::AsyncIO(void) :
-    pendingIOOperations(IO_BUFFERS_COUNT * 2),
+    pendingOperations(IO_BUFFERS_COUNT * 2),
     freeBuffers(IO_BUFFERS_COUNT) {
 }
 
@@ -59,13 +59,15 @@ void AsyncIO::threadLoop(void) {
 
         AsyncIOOperation operation;
 
-        this->pendingIOOperations.wait_dequeue(operation);
+        this->pendingOperations.wait_dequeue(operation);
 
         if (operation.operationType == Write) {
 
             size_t ret = fwrite(operation.buffer, 1, operation.size, operation.file);
             if (ret != operation.size)
                 throw new std::runtime_error("Async IO write failed");
+
+            print_log(ANDROID_LOG_INFO, ASYNC_IO_TAG, "written: %d", ret);
 
             this->freeBuffers.enqueue(operation.buffer);
 
@@ -77,7 +79,7 @@ void AsyncIO::threadLoop(void) {
             break;
     }
 
-    if (this->pendingIOOperations.size_approx() > 0)
+    if (this->pendingOperations.size_approx() > 0)
         print_log(ANDROID_LOG_WARN, ASYNC_IO_TAG, "Async IO have pending operations after finalization");
 }
 
@@ -104,7 +106,7 @@ void AsyncIO::write(FILE *f, void* buffer, size_t size) {
     operation.buffer = currentBuffer;
     operation.size = size;
 
-    pendingIOOperations.enqueue(operation);
+    pendingOperations.enqueue(operation);
 }
 
 void AsyncIO::closeFile(FILE **f) {
@@ -114,7 +116,7 @@ void AsyncIO::closeFile(FILE **f) {
         operation.operationType = CloseFile;
         operation.file = *f;
 
-        pendingIOOperations.enqueue(operation);
+        pendingOperations.enqueue(operation);
 
         *f = NULL;
     }
@@ -125,7 +127,7 @@ void AsyncIO::terminate(void) {
     AsyncIOOperation operation = { };
     operation.operationType = FinalizeIO;
 
-    pendingIOOperations.enqueue(operation);
+    pendingOperations.enqueue(operation);
 
     pthread_check_error(pthread_join(thread, NULL));
 }

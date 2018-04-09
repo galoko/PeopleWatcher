@@ -27,8 +27,10 @@ public class MainActivity extends Activity {
     private MyCameraManager cameraManager;
 
     void setupLogToFile() {
-        File logFile = new File(Environment.getExternalStorageDirectory().getAbsolutePath() +
+        File logFile = new File(this.getExternalFilesDir(null) +
                 "/PeopleWatcherLog.txt");
+
+        Log.i(REPORT_TAG, "Logging to " + logFile.getAbsolutePath());
 
         if (logFile.exists())
             logFile.delete();

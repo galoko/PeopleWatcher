@@ -19,11 +19,11 @@ extern "C" {
 #define ENCODER_TAG "PW_ENCODER"
 
 void FFmpegEncoder::startRecord(RecordType recordType, EncoderType encoderType, int width, int height,
-                                const char *filePath, io_callback_func io_callback) {
+                                const char *filePath, encoder_callback_func callback) {
 
     free();
 
-    this->io_callback = io_callback;
+    this->callback = callback;
 
     this->useFFmpeg = encoderType == x264 || encoderType == openh264;
 
@@ -67,7 +67,7 @@ void FFmpegEncoder::startRecord(RecordType recordType, EncoderType encoderType, 
         my_assert(video_params == NULL);
         if (encoderType == x264) {
             av_dict_set(&video_params, "preset", "ultrafast", 0);
-            av_dict_set(&video_params, "crf", recordType == TestData ? "0" : "25", 0);
+            av_dict_set(&video_params, "crf", recordType == TestData ? "17" : "25", 0);
             av_dict_set(&video_params, "x264-params", "scenecut=0:subme=0:trellis=0:me=dia", 0);
         } else {
             av_dict_set(&video_params, "profile", "baseline", 0);
@@ -136,8 +136,11 @@ void FFmpegEncoder::startRecord(RecordType recordType, EncoderType encoderType, 
 
     // creating actual file on disk
 
-    if (io_callback) {
-        io_callback(filePath, &format_ctx->pb);
+    if (callback) {
+
+        my_assert(format_ctx->pb == NULL);
+
+        format_ctx->pb = (AVIOContext*) callback(CreateIO, filePath);
         if (format_ctx->pb == NULL)
             throw new std::runtime_error("IO callback couldn't create IO context");
     }
@@ -428,8 +431,8 @@ void FFmpegEncoder::free(void) {
     video_stream = NULL;
     if (format_ctx != NULL) {
 
-        if (io_callback)
-            io_callback(NULL, &format_ctx->pb);
+        if (callback)
+            callback(CloseIO, &format_ctx->pb);
         else
             avio_closep(&format_ctx->pb);
 

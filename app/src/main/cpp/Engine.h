@@ -26,6 +26,8 @@ private:
     static void motionDetectorCallback(AVFrame *yuvFrame);
     void motionDetected(AVFrame* yuvFrame);
 public:
+    // all these methods should be called from single thread
+
     void initialize(const char* sdCardPathStr);
     void finalize(void);
 

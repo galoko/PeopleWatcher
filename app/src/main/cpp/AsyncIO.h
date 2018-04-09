@@ -33,7 +33,7 @@ private:
 
     int initialized;
 
-    BlockingReaderWriterQueue<AsyncIOOperation> pendingIOOperations;
+    BlockingReaderWriterQueue<AsyncIOOperation> pendingOperations;
     BlockingReaderWriterQueue<void*> freeBuffers;
 
     pthread_mutex_t mutex;

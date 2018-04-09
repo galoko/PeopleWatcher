@@ -1,6 +1,10 @@
 #include "Engine.h"
 
+#include <unistd.h>
+
 #include "log.h"
+
+#include "opencv2/highgui.hpp"
 
 extern "C" {
 #include "imageUtils.h"
@@ -11,6 +15,8 @@ extern "C" {
 #include "MotionDetector.h"
 
 #define ENGINE_TAG "PW_ENGINE"
+
+using namespace cv;
 
 Engine::Engine(void) {
 }
@@ -23,6 +29,8 @@ void Engine::initialize(const char *sdCardPath) {
     AsyncIO::getInstance().initialize();
     Encoder::getInstance().initialize(sdCardPath);
     MotionDetector::getInstance().initialize(sdCardPath, motionDetectorCallback);
+
+    nice(-20);
 
     this->initialized = 1;
 }
@@ -42,6 +50,8 @@ void Engine::startRecord(void) {
 }
 
 void Engine::stopRecord(void) {
+
+    MotionDetector::getInstance().flush();
 
     Encoder::getInstance().stopRecord();
 }
@@ -68,11 +78,10 @@ void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
 
 void Engine::motionDetected(AVFrame* yuvFrame) {
 
-    av_frame_free(&yuvFrame);
-
-    // Encoder::getInstance().sendFrame(yuvFrame);
+    Encoder::getInstance().sendFrame(yuvFrame);
 }
 
 void Engine::motionDetectorCallback(AVFrame *yuvFrame) {
+    
     Engine::getInstance().motionDetected(yuvFrame);
 }

@@ -32,7 +32,10 @@ void Encoder::initialize(const char *sdCardPath) {
 
 void Encoder::startRecord(void) {
 
-    // for now - doing nothing for this method
+    EncoderOperation operation = { };
+    operation.operationType = StartRecord;
+
+    pendingOperations.enqueue(operation);
 }
 
 void Encoder::stopRecord(void) {
@@ -41,6 +44,8 @@ void Encoder::stopRecord(void) {
     operation.operationType = CloseRecord;
 
     pendingOperations.enqueue(operation);
+
+    // print_log(ANDROID_LOG_INFO, ENCODER_TAG, "CloseRecord operation sent");
 }
 
 bool Encoder::canAcceptFrame(void) {
@@ -59,6 +64,8 @@ void Encoder::sendFrame(AVFrame* yuvFrame) {
         print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Frame drop");
 
         av_frame_free(&yuvFrame);
+    } else {
+        // print_log(ANDROID_LOG_INFO, ENCODER_TAG, "EncodeFrame operation sent");
     }
 }
 
@@ -69,6 +76,8 @@ void Encoder::terminate(void) {
 
     pendingOperations.enqueue(operation);
 
+    // print_log(ANDROID_LOG_INFO, ENCODER_TAG, "FinalizeEncoder operation sent");
+
     pthread_check_error(pthread_join(thread, NULL));
 }
 
@@ -77,8 +86,9 @@ void Encoder::terminate(void) {
 
 void Encoder::startEncoding(void) {
 
-    encoder.startRecord(TestData, x264, WIDTH, HEIGHT, (this->sdCardPath + "/record.flv").c_str(),
-                        io_callback_create);
+    encoder.startRecord(Record, MediaCodec, WIDTH, HEIGHT,
+                        (this->sdCardPath + "/record.flv").c_str(),
+                        encoder_callback);
 }
 
 void Encoder::stopEncoding(void) {
@@ -97,6 +107,7 @@ void* Encoder::thread_entrypoint(void* opaque) {
 void Encoder::threadLoop(void) {
 
     long long startTime = 0;
+    bool recordStarted = false;
 
     while (true) {
 
@@ -104,29 +115,56 @@ void Encoder::threadLoop(void) {
 
         this->pendingOperations.wait_dequeue(operation);
 
+        /*
         if (operation.operationType == EncodeFrame) {
+            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "EncodeFrame operation recved");
+        } else if (operation.operationType == CloseRecord) {
+            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "CloseRecord operation recved");
+        } else if (operation.operationType == FinalizeEncoder) {
+            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "FinalizeEncoder operation recved");
+        }
+         */
+
+        if (operation.operationType == StartRecord) {
+
+            if (!recordStarted) {
+                my_assert(startTime == 0);
+
+                startEncoding();
+
+                recordStarted = true;
+            } else {
+                print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Record is already started");
+            }
+
+        } else if (operation.operationType == EncodeFrame) {
 
             AVFrame *yuvFrame = operation.frame;
 
-            // auto start
-            if (startTime == 0) {
+            if (recordStarted) {
 
-                startTime = yuvFrame->pts;
+                if (startTime == 0)
+                    startTime = yuvFrame->pts;
 
-                startEncoding();
+                my_assert(yuvFrame->pts >= startTime);
+                yuvFrame->pts -= startTime;
+
+                encoder.writeFrame(yuvFrame);
+            } else {
+
+                print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Framed drop because record isn't started");
+
+                av_frame_free(&yuvFrame);
             }
-
-            my_assert(yuvFrame->pts >= startTime);
-            yuvFrame->pts -= startTime;
-
-            encoder.writeFrame(yuvFrame);
 
         } else if (operation.operationType == CloseRecord || operation.operationType == FinalizeEncoder) {
 
-            if (startTime > 0) {
+            if (recordStarted) {
 
                 stopEncoding();
+
                 startTime = 0;
+                recordStarted = false;
             }
 
             if (operation.operationType == FinalizeEncoder)
@@ -143,55 +181,73 @@ void Encoder::threadLoop(void) {
 
 // async IO part
 
-void Encoder::createIO(const char *filePath, AVIOContext **pb) {
+AVIOContext* Encoder::createIO(const char *filePath) {
 
-    if (filePath != NULL) {
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "creating io");
 
-        my_assert(io_buffer == NULL);
+    my_assert(io_buffer == NULL);
 
-        io_file = fopen(filePath, "w");
-        if (io_file == NULL) {
-            closeIO();
-            return;
-        }
-
-        size_t io_buffer_size = AsyncIO::IO_BUFFER_SIZE;
-
-        io_buffer = av_mallocz(io_buffer_size + AV_INPUT_BUFFER_PADDING_SIZE);
-        if (io_buffer == NULL) {
-            closeIO();
-            return;
-        }
-
-        *pb = avio_alloc_context((uint8_t *) io_buffer, io_buffer_size, 1, io_file, NULL,
-                                 io_callback_write, NULL);
-
-        if (*pb == NULL) {
-            closeIO();
-            return;
-        }
-    } else {
-        closeIO();
-        avio_context_free(pb);
+    io_file = fopen(filePath, "w");
+    if (io_file == NULL) {
+        closeIO(NULL);
+        return NULL;
     }
+
+    size_t io_buffer_size = AsyncIO::IO_BUFFER_SIZE;
+
+    io_buffer = av_mallocz(io_buffer_size + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (io_buffer == NULL) {
+        closeIO(NULL);
+        return NULL;
+    }
+
+    AVIOContext* pb = avio_alloc_context((uint8_t *) io_buffer, io_buffer_size, 1, io_file, NULL,
+                             io_write_callback, NULL);
+
+    if (pb == NULL) {
+        closeIO(NULL);
+        return pb;
+    }
+
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "io created");
+
+    return pb;
 }
 
-void Encoder::closeIO(void) {
+void Encoder::closeIO(AVIOContext **pb) {
+
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "closing io");
+
+    // free context
+    if (pb != NULL)
+        avio_context_free(pb);
+
     // free buffer
     av_freep(&this->io_buffer);
 
     // schedule file close
     AsyncIO::getInstance().closeFile(&io_file);
+
+    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "io closed");
 }
 
 // static C-like callbacks
 
-void Encoder::io_callback_create(const char *filePath, AVIOContext **pb) {
 
-    Encoder::getInstance().createIO(filePath, pb);
+void* Encoder::encoder_callback(RequestType request, const void* param) {
+
+    switch (request) {
+        case CreateIO: {
+            return Encoder::getInstance().createIO((const char*) param);
+        };
+        case CloseIO: {
+            Encoder::getInstance().closeIO((AVIOContext**) param);
+            return NULL;
+        };
+    }
 }
 
-int Encoder::io_callback_write(void *opaque, uint8_t *buf, int buf_size) {
+int Encoder::io_write_callback(void *opaque, uint8_t *buf, int buf_size) {
 
     FILE *f = (FILE*) opaque;
 

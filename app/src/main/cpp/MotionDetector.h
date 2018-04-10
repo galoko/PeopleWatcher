@@ -3,6 +3,11 @@
 
 #include <queue>
 
+#include "opencv2/highgui.hpp"
+#include <opencv2/optflow.hpp>
+
+using namespace cv;
+
 #include "blockingconcurrentqueue.h"
 
 extern "C" {
@@ -39,7 +44,7 @@ private:
     };
 
     struct DetectionRequest {
-        AVFrame *frame, *nextFrame;
+        AVFrame *prevFrame, *frame, *nextFrame;
         long long sequenceNum;
         bool haveMotion;
     };
@@ -79,10 +84,10 @@ private:
     pthread_cond_t cond;
     pthread_t thread;
 
-    AVFrame *frame;
+    AVFrame *prevFrame, *frame;
     long long currentSequenceNum, nextSequenceNum;
 
-    long long lastFrameTime, lastMotionTime;
+    long long lastFrameTime, lastMotionTime, lastFrameWithMotionTime;
     std::vector<DetectionRequest*> sequentialOperations;
     std::queue<AVFrame*> bufferedFrames;
 
@@ -92,13 +97,16 @@ private:
     static void pool_worker(void* opaque);
     void PoolWorker(DetectionRequest *request);
 
-    void addFrameToPool(AVFrame* yuvFrame);
+    void addFrameToRequests(AVFrame *yuvFrame);
     void resetDetector(void);
 
     AVFrame* generateGrayDownscaleCrop(AVFrame *yuvFrame);
+    static void convertFlowToImage(Mat* flow, Mat* image, double minLen);
+
     bool detectMotion(AVFrame *frame, AVFrame *nextFrame);
     void processDetectedMotion(DetectionRequest *request);
     void processFrame(AVFrame *frame, bool haveMotion);
+    void correctTimestamp(AVFrame *frame);
 
     static bool request_comparer(const DetectionRequest *left, const DetectionRequest *right);
     static void free_detection_request(DetectionRequest **request);

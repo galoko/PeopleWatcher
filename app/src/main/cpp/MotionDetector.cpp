@@ -7,11 +7,6 @@ extern "C" {
 #include "imageUtils.h"
 }
 
-#include "opencv2/highgui.hpp"
-#include <opencv2/optflow.hpp>
-
-using namespace cv;
-
 #define MOTION_DETECTOR_TAG "PW_MOTION_DETECTOR"
 
 #define FRAME_BUFFER_SIZE (20 * 3) // 20 fps for 3 seconds (~29 MB buffer)
@@ -99,13 +94,20 @@ void MotionDetector::terminate(void) {
 
 // processing
 
-void MotionDetector::addFrameToPool(AVFrame* yuvFrame) {
+void MotionDetector::addFrameToRequests(AVFrame *yuvFrame) {
+
+    my_assert(yuvFrame->opaque == NULL);
 
     if (lastFrameTime != 0) {
 
-        long long elapsed = yuvFrame->pts - lastFrameTime;
+        long long frameTime = yuvFrame->pts - lastFrameTime;
+        my_assert(frameTime >= 0 && frameTime <= ULONG_MAX);
 
-        print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "frame time: %lld ms", elapsed / (1000 * 1000));
+        yuvFrame->opaque = (void*) frameTime;
+
+        print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "frame time: %lld ms", frameTime / (1000 * 1000));
+    } else {
+        yuvFrame->opaque = (void*) 0;
     }
 
     lastFrameTime = yuvFrame->pts;
@@ -126,7 +128,14 @@ void MotionDetector::addFrameToPool(AVFrame* yuvFrame) {
         return;
     }
 
-    // we need two frames in order to perform motion detection
+    // we need three frames in order to perform motion detection
+
+    if (this->prevFrame == NULL) {
+
+        this->prevFrame = yuvFrame;
+        return;
+    }
+
     if (this->frame == NULL) {
 
         this->frame = yuvFrame;
@@ -134,10 +143,12 @@ void MotionDetector::addFrameToPool(AVFrame* yuvFrame) {
     }
 
     DetectionRequest *request = new DetectionRequest();
+    request->prevFrame = this->prevFrame;
     request->frame = this->frame;
     request->nextFrame = yuvFrame;
     request->sequenceNum = nextSequenceNum;
 
+    this->prevFrame = NULL;
     this->frame = NULL;
 
     scheduledCount++;
@@ -182,16 +193,33 @@ void MotionDetector::processDetectedMotion(DetectionRequest *request) {
             it = sequentialOperations.erase(it);
             currentSequenceNum++;
 
+            processFrame(currentRequest->prevFrame, false);
             processFrame(currentRequest->frame, currentRequest->haveMotion);
-            processFrame(currentRequest->nextFrame, currentRequest->haveMotion);
+            processFrame(currentRequest->nextFrame, false);
 
+            currentRequest->prevFrame = NULL;
             currentRequest->frame = NULL;
             currentRequest->nextFrame = NULL;
+
             free_detection_request(&currentRequest);
         }
         else
             break;
     }
+}
+
+void MotionDetector::correctTimestamp(AVFrame *frame) {
+
+    if (lastFrameWithMotionTime == 0) {
+
+        lastFrameWithMotionTime = frame->pts;
+        return;
+    }
+
+    unsigned long int frameTime = (unsigned long int) frame->opaque;
+    lastFrameWithMotionTime += frameTime;
+
+    frame->pts = lastFrameWithMotionTime;
 }
 
 void MotionDetector::processFrame(AVFrame *frame, bool haveMotion) {
@@ -218,8 +246,10 @@ void MotionDetector::processFrame(AVFrame *frame, bool haveMotion) {
 
                 bufferedFrames.pop();
 
-                if (frameHaveMotion && callback != NULL)
+                if (frameHaveMotion && callback != NULL) {
+                    correctTimestamp(latestFrame);
                     callback(latestFrame);
+                }
                 else
                     av_frame_free(&latestFrame);
             } else
@@ -278,6 +308,31 @@ AVFrame* MotionDetector::generateGrayDownscaleCrop(AVFrame *yuvFrame) {
     return downscale;
 }
 
+void MotionDetector::convertFlowToImage(Mat* flow, Mat* image, double minLen) {
+
+    double minLenSq = minLen * minLen;
+
+    int width = flow->cols;
+    int height = flow->rows;
+
+    *image = Mat(height, width, CV_8UC1);
+
+    for (int y = 0; y < height; y++) {
+
+        uchar *pixelRow = image->ptr<uchar>(y);
+        Point2f *flowRow = flow->ptr<Point2f>(y);
+
+        for (int x = 0; x < width; x++) {
+
+            Point2f v = flowRow[x];
+
+            double lenSq = v.dot(v);
+
+            pixelRow[x] = (uchar) (lenSq < minLenSq ?  0 : 255);
+        }
+    }
+}
+
 bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
     int64 startTime = getTickCount();
@@ -296,13 +351,32 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
     calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 10, 1, 7, 1.2, 0);
 
+    Mat flowImg;
+    convertFlowToImage(&flow, &flowImg, 0.6);
+
+    dilate(flowImg, flowImg, Mat(), Point(-1, -1), 3);
+
+    std::vector<std::vector<Point>> contours;
+    findContours(flowImg, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    bool haveMovement = false;
+
+    // loop over the contours
+    for (std::vector<Point> contour : contours) {
+
+        if (contourArea(contour) >= 10 * 20) {
+            haveMovement = true;
+            break;
+        }
+    }
+
     int64 endTime = getTickCount();
 
     double elapsed = (endTime - startTime) / getTickFrequency();
 
     print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "Motion detection took %d ms", (int) (elapsed * 1000.0));
 
-    return true;
+    return haveMovement;
 }
 
 void MotionDetector::pool_worker(void* opaque) {
@@ -356,7 +430,7 @@ void MotionDetector::threadLoop(void) {
 
         if (operation.operationType == FrameSent) {
 
-            addFrameToPool(operation.frame);
+            addFrameToRequests(operation.frame);
 
         } else if (operation.operationType == MotionDetected) {
 
@@ -407,6 +481,7 @@ void MotionDetector::threadLoop(void) {
 
             lastFrameTime = 0;
             lastMotionTime = 0;
+            lastFrameWithMotionTime = 0;
 
             pthread_check_error(pthread_cond_signal(&cond));
             pthread_check_error(pthread_mutex_unlock(&mutex));
@@ -431,6 +506,7 @@ bool MotionDetector::request_comparer(const DetectionRequest *left, const Detect
 void MotionDetector::free_detection_request(DetectionRequest **request) {
 
     if (*request != NULL) {
+        av_frame_free(&(*request)->prevFrame);
         av_frame_free(&(*request)->frame);
         av_frame_free(&(*request)->nextFrame);
         delete *request;

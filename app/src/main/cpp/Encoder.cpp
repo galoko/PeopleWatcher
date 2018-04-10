@@ -9,7 +9,7 @@
 
 #define FRAME_BUFFER_SIZE 20 * 3 // 20 fps for 3 seconds (~28 MB buffer)
 
-Encoder::Encoder(void) : pendingOperations(FRAME_BUFFER_SIZE) {
+Encoder::Encoder(void) : pendingOperations(FRAME_BUFFER_SIZE, 2, 2) {
 }
 
 void Encoder::initialize(const char *sdCardPath) {
@@ -61,7 +61,7 @@ void Encoder::sendFrame(AVFrame* yuvFrame) {
 
     if (!pendingOperations.try_enqueue(operation)) {
 
-        print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Frame drop");
+        print_log(ANDROID_LOG_WARN, ENCODER_TAG, "Frame drop (%d operations in queue)", pendingOperations.size_approx());
 
         av_frame_free(&yuvFrame);
     } else {
@@ -86,7 +86,7 @@ void Encoder::terminate(void) {
 
 void Encoder::startEncoding(void) {
 
-    encoder.startRecord(Record, MediaCodec, WIDTH, HEIGHT,
+    encoder.startRecord(Record, x264, WIDTH, HEIGHT,
                         (this->sdCardPath + "/record.flv").c_str(),
                         encoder_callback);
 }

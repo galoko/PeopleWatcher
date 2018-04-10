@@ -163,9 +163,9 @@ void FFmpegEncoder::startRecord(RecordType recordType, EncoderType encoderType, 
         // initialize file header
         av_check_error(avformat_write_header(format_ctx, NULL));
 
-        isHeaderWritten = true;
+        areHeadersWritten = true;
     } else {
-        isHeaderWritten = false;
+        areHeadersWritten = false;
     }
 
     // filters
@@ -342,7 +342,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
                 if (buffer == NULL)
                     throw new std::runtime_error("Output buffer is NULL");
 
-                if (!isHeaderWritten) {
+                if (!areHeadersWritten) {
                     if ((info.flags & 2) != 0) {
                         size_t extradata_size = (size_t) info.size;
                         video_stream->codecpar->extradata_size = extradata_size;
@@ -356,7 +356,7 @@ void FFmpegEncoder::encodeFrame(AVFrame *frame) {
                         // initialize file header
                         av_check_error(avformat_write_header(format_ctx, NULL));
 
-                        isHeaderWritten = true;
+                        areHeadersWritten = true;
                     } else {
                         throw new std::runtime_error(
                                 "Cannot get SPS and PPS nal units, header couldn't be written");
@@ -416,8 +416,10 @@ void FFmpegEncoder::closeRecord(void) {
     print_log(ANDROID_LOG_INFO, ENCODER_TAG, "flushing file");
     av_check_error(av_interleaved_write_frame(format_ctx, NULL));
 
-    print_log(ANDROID_LOG_INFO, ENCODER_TAG, "writing headers");
-    av_check_error(av_write_trailer(format_ctx));
+    if (areHeadersWritten) {
+        print_log(ANDROID_LOG_INFO, ENCODER_TAG, "writing trailer");
+        av_check_error(av_write_trailer(format_ctx));
+    }
 
     print_log(ANDROID_LOG_INFO, ENCODER_TAG, "record closed");
 

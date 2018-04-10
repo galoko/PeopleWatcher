@@ -9,7 +9,7 @@ extern "C" {
 
 #define MOTION_DETECTOR_TAG "PW_MOTION_DETECTOR"
 
-#define FRAME_BUFFER_SIZE (20 * 3) // 20 fps for 3 seconds (~29 MB buffer)
+#define FRAME_BUFFER_SIZE (20 * 1) // 20 fps for 3 seconds (~29 MB buffer)
 #define MAX_SCHEDULED_DETECTIONS (FRAME_BUFFER_SIZE / 2)
 #define THREADS_IN_THREAD_POOL 3
 
@@ -191,6 +191,7 @@ void MotionDetector::processDetectedMotion(DetectionRequest *request) {
         if (currentRequest->sequenceNum == currentSequenceNum) {
 
             it = sequentialOperations.erase(it);
+
             currentSequenceNum++;
 
             processFrame(currentRequest->prevFrame, false);

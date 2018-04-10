@@ -144,7 +144,7 @@ final class MyCameraManager  {
                 }
             }
 
-            if (frameTime > 30) {
+            if (frameTime > 3 * 60 * 60) {
 
                 Log.i(CAMERA_TAG, "stopping");
 

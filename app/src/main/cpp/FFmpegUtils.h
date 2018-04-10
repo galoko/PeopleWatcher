@@ -1,6 +1,8 @@
 #ifndef PEOPLEWATCHER_FFMPEGUTILS_H
 #define PEOPLEWATCHER_FFMPEGUTILS_H
 
+#include <string>
+
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -45,7 +47,7 @@ private:
     // file format
     AVFormatContext *format_ctx;
     AVStream *video_stream;
-    bool isHeaderWritten;
+    bool areHeadersWritten;
 
     // ffmpeg codec
     AVCodecContext *video_codec_ctx;

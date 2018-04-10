@@ -55,7 +55,7 @@ private:
         AVFrame* frame;
     };
 
-    static const int MOTION_PROPAGATION_TIME = 150 * 1000 * 1000; // 150 ms in nanonseconds
+    static const int MOTION_PROPAGATION_TIME = 525 * 1000 * 1000; // 525 ms in nanonseconds
 
     static const int OFFSET_Y         = 200;
 

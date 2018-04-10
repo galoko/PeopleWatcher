@@ -1,6 +1,8 @@
 #ifndef PEOPLEWATCHER_ASYNCIO_H
 #define PEOPLEWATCHER_ASYNCIO_H
 
+#include <pthread.h>
+
 #include "readerwriterqueue.h"
 
 using namespace moodycamel;

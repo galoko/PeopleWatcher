@@ -4,8 +4,8 @@ set(CMAKE_SYSTEM_NAME  Android)
 
 set(CMAKE_SYSTEM_VERSION 1)
 
-SET(CMAKE_BUILD_TYPE Debug)
-#SET(CMAKE_BUILD_TYPE RelWithDebInfo)
+#SET(CMAKE_BUILD_TYPE Debug)
+SET(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS} -Ofast -funwind-tables -Wl,--no-merge-exidx-entries")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -Ofast -funwind-tables -Wl,--no-merge-exidx-entries")
@@ -38,6 +38,7 @@ target_link_libraries(engine
                       mediandk
                       log
                       z
+                      stdc++
                       ${PREBUILT_DIR}/lib/libswscale.a
                       ${PREBUILT_DIR}/lib/libavfilter.a
                       ${PREBUILT_DIR}/lib/libavformat.a

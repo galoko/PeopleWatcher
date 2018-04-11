@@ -21,14 +21,14 @@ using namespace cv;
 Engine::Engine(void) {
 }
 
-void Engine::initialize(const char *sdCardPath) {
+void Engine::initialize(const char *rootDir) {
 
     if (this->initialized)
         return;
 
     AsyncIO::getInstance().initialize();
-    Encoder::getInstance().initialize(sdCardPath);
-    MotionDetector::getInstance().initialize(sdCardPath, motionDetectorCallback);
+    Encoder::getInstance().initialize(rootDir);
+    MotionDetector::getInstance().initialize(rootDir, motionDetectorCallback);
 
     nice(-20);
 

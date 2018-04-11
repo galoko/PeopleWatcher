@@ -37,7 +37,7 @@ private:
 
     int initialized;
 
-    std::string sdCardPath;
+    std::string rootDir;
 
     BlockingConcurrentQueue<EncoderOperation> pendingOperations;
 
@@ -62,7 +62,7 @@ public:
     static const int WIDTH  = 640;
     static const int HEIGHT = 480;
 
-    void initialize(const char *sdCardPath);
+    void initialize(const char *rootDir);
 
     void startRecord(void);
     void stopRecord(void);

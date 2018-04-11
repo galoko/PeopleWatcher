@@ -12,12 +12,12 @@
 Encoder::Encoder(void) : pendingOperations(FRAME_BUFFER_SIZE, 2, 2) {
 }
 
-void Encoder::initialize(const char *sdCardPath) {
+void Encoder::initialize(const char *rootDir) {
 
     if (this->initialized)
         return;
 
-    this->sdCardPath = std::string(sdCardPath);
+    this->rootDir = std::string(rootDir);
 
     setup_ffmpeg_log();
 
@@ -87,7 +87,7 @@ void Encoder::terminate(void) {
 void Encoder::startEncoding(void) {
 
     encoder.startRecord(Record, x264, WIDTH, HEIGHT,
-                        (this->sdCardPath + "/record.flv").c_str(),
+                        (this->rootDir + "/record.flv").c_str(),
                         encoder_callback);
 }
 

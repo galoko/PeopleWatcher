@@ -28,7 +28,7 @@ private:
 public:
     // all these methods should be called from single thread
 
-    void initialize(const char* sdCardPathStr);
+    void initialize(const char* rootDir);
     void finalize(void);
 
     void startRecord(void);

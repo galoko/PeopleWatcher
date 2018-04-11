@@ -18,12 +18,12 @@ MotionDetector::MotionDetector(void) : pendingOperations(FRAME_BUFFER_SIZE,
                                                          1 + THREADS_IN_THREAD_POOL) {
 }
 
-void MotionDetector::initialize(const char *sdCardPath, MotionDetectorCallback callback) {
+void MotionDetector::initialize(const char *rootDir, MotionDetectorCallback callback) {
 
     if (this->initialized)
         return;
 
-    this->sdCardPath = std::string(sdCardPath);
+    this->rootDir = std::string(rootDir);
 
     this->callback = callback;
 
@@ -63,10 +63,14 @@ void MotionDetector::flush(void) {
 
     thpool_wait(pool);
 
+    print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "flush: wait reset enter");
+
     pthread_check_error(pthread_mutex_lock(&mutex));
     resetDetector();
     pthread_check_error(pthread_cond_wait(&cond, &mutex));
     pthread_check_error(pthread_mutex_unlock(&mutex));
+
+    print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "flush: wait reset exit");
 }
 
 void MotionDetector::resetDetector(void) {
@@ -105,7 +109,7 @@ void MotionDetector::addFrameToRequests(AVFrame *yuvFrame) {
 
         yuvFrame->opaque = (void*) frameTime;
 
-        print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "frame time: %lld ms", frameTime / (1000 * 1000));
+        print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "frame time: %lld ms", frameTime / (1000 * 1000));
     } else {
         yuvFrame->opaque = (void*) 0;
     }
@@ -153,7 +157,7 @@ void MotionDetector::addFrameToRequests(AVFrame *yuvFrame) {
 
     scheduledCount++;
 
-    print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "added task to thread pool, scheduled: %d",
+    print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "added task to thread pool, scheduled: %d",
               (int) scheduledCount);
 
     int ret = thpool_add_work(this->pool, pool_worker, (void*) request);
@@ -249,6 +253,7 @@ void MotionDetector::processFrame(AVFrame *frame, bool haveMotion) {
 
                 if (frameHaveMotion && callback != NULL) {
                     correctTimestamp(latestFrame);
+                    print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "frame with motion send to callback");
                     callback(latestFrame);
                 }
                 else
@@ -334,40 +339,70 @@ void MotionDetector::convertFlowToImage(Mat* flow, Mat* image, double minLen) {
     }
 }
 
+uint8_t MotionDetector::getGrayscaleMeanLuminace(AVFrame *frame) {
+
+    unsigned long int sum = 0;
+
+    int width = frame->width;
+    int height = frame->height;
+
+    uchar *pixels = frame->data[0];
+
+    for (int y = 0; y < height; y++) {
+
+        uchar *pixelRow = pixels;
+
+        for (int x = 0; x < width; x++) {
+
+            sum += *pixelRow;
+            pixelRow++;
+        }
+
+        pixels += frame->linesize[0];
+    }
+
+    return (uint8_t) (sum / (width * height));
+}
+
 bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
     int64 startTime = getTickCount();
 
-    Mat img(frame->height, frame->width, CV_8UC1, frame->data[0],
-            (size_t) frame->linesize[0]);
-    Mat nextImg(nextFrame->height, nextFrame->width, CV_8UC1, nextFrame->data[0], (size_t) nextFrame->linesize[0]);
-
-    Mat flow;
-
-    img.convertTo(img, -1, 0.5, 0.0);
-    nextImg.convertTo(nextImg, -1, 0.5, 0.0);
-
-    GaussianBlur(img, img, Size(21, 21), 0.0);
-    GaussianBlur(nextImg, nextImg, Size(21, 21), 0.0);
-
-    calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 10, 1, 7, 1.2, 0);
-
-    Mat flowImg;
-    convertFlowToImage(&flow, &flowImg, 0.6);
-
-    dilate(flowImg, flowImg, Mat(), Point(-1, -1), 3);
-
-    std::vector<std::vector<Point>> contours;
-    findContours(flowImg, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
     bool haveMovement = false;
 
-    // loop over the contours
-    for (std::vector<Point> contour : contours) {
+    uint8_t luminance = getGrayscaleMeanLuminace(frame);
+    if (luminance > 70) {
 
-        if (contourArea(contour) >= 10 * 20) {
-            haveMovement = true;
-            break;
+        Mat img(frame->height, frame->width, CV_8UC1, frame->data[0],
+                (size_t) frame->linesize[0]);
+        Mat nextImg(nextFrame->height, nextFrame->width, CV_8UC1, nextFrame->data[0],
+                    (size_t) nextFrame->linesize[0]);
+
+        Mat flow;
+
+        img.convertTo(img, -1, 0.5, 0.0);
+        nextImg.convertTo(nextImg, -1, 0.5, 0.0);
+
+        GaussianBlur(img, img, Size(21, 21), 0.0);
+        GaussianBlur(nextImg, nextImg, Size(21, 21), 0.0);
+
+        calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 10, 1, 7, 1.2, 0);
+
+        Mat flowImg;
+        convertFlowToImage(&flow, &flowImg, 0.6);
+
+        dilate(flowImg, flowImg, Mat(), Point(-1, -1), 3);
+
+        std::vector<std::vector<Point>> contours;
+        findContours(flowImg, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        // loop over the contours
+        for (std::vector<Point> contour : contours) {
+
+            if (contourArea(contour) >= 10 * 20) {
+                haveMovement = true;
+                break;
+            }
         }
     }
 
@@ -375,7 +410,7 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
     double elapsed = (endTime - startTime) / getTickFrequency();
 
-    print_log(ANDROID_LOG_INFO, MOTION_DETECTOR_TAG, "Motion detection took %d ms", (int) (elapsed * 1000.0));
+    print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "Motion detection took %d ms", (int) (elapsed * 1000.0));
 
     return haveMovement;
 }
@@ -441,6 +476,9 @@ void MotionDetector::threadLoop(void) {
 
             pthread_check_error(pthread_mutex_lock(&mutex));
 
+            if (operation.operationType == ResetDetector)
+                print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "reset start");
+
             // deleting frames that awaits motion that will not happen at this point
             while (!bufferedFrames.empty()) {
 
@@ -483,6 +521,9 @@ void MotionDetector::threadLoop(void) {
             lastFrameTime = 0;
             lastMotionTime = 0;
             lastFrameWithMotionTime = 0;
+
+            if (operation.operationType == ResetDetector)
+                print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "reset finish");
 
             pthread_check_error(pthread_cond_signal(&cond));
             pthread_check_error(pthread_mutex_unlock(&mutex));

@@ -8,16 +8,16 @@
 #include "Engine.h"
 
 extern "C" JNIEXPORT void JNICALL Java_com_galover_media_peoplewatcher_EngineManager_initializeEngine(
-        JNIEnv *env, jobject /*this*/, jstring sdCardPath) {
+        JNIEnv *env, jobject /*this*/, jstring rootDir) {
 
     try {
         COFFEE_TRY() {
 
-            const char *sdCardPathStr = env->GetStringUTFChars(sdCardPath, JNI_FALSE);
+            const char *rootDirStr = env->GetStringUTFChars(rootDir, JNI_FALSE);
 
-            Engine::getInstance().initialize(sdCardPathStr);
+            Engine::getInstance().initialize(rootDirStr);
 
-            env->ReleaseStringUTFChars(sdCardPath, sdCardPathStr);
+            env->ReleaseStringUTFChars(rootDir, rootDirStr);
 
         } COFFEE_CATCH() {
             coffeecatch_throw_exception(env);

@@ -67,7 +67,7 @@ private:
 
     int initialized;
 
-    std::string sdCardPath;
+    std::string rootDir;
 
     MotionDetectorCallback callback;
 
@@ -102,6 +102,7 @@ private:
 
     AVFrame* generateGrayDownscaleCrop(AVFrame *yuvFrame);
     static void convertFlowToImage(Mat* flow, Mat* image, double minLen);
+    static uint8_t getGrayscaleMeanLuminace(AVFrame *frame);
 
     bool detectMotion(AVFrame *frame, AVFrame *nextFrame);
     void processDetectedMotion(DetectionRequest *request);
@@ -111,7 +112,7 @@ private:
     static bool request_comparer(const DetectionRequest *left, const DetectionRequest *right);
     static void free_detection_request(DetectionRequest **request);
 public:
-    void initialize(const char *sdCardPath, MotionDetectorCallback callback);
+    void initialize(const char *rootDir, MotionDetectorCallback callback);
 
     bool canAcceptFrame(void);
     void sendFrame(AVFrame* yuvFrame);

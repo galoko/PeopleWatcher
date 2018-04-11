@@ -67,7 +67,7 @@ void AsyncIO::threadLoop(void) {
             if (ret != operation.size)
                 throw new std::runtime_error("Async IO write failed");
 
-            print_log(ANDROID_LOG_INFO, ASYNC_IO_TAG, "written: %d", ret);
+            print_log(ANDROID_LOG_DEBUG, ASYNC_IO_TAG, "written: %d", ret);
 
             this->freeBuffers.enqueue(operation.buffer);
 

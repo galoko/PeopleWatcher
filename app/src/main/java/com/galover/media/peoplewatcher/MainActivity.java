@@ -8,10 +8,15 @@ import android.support.annotation.NonNull;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import java.io.*;
+
 import android.media.MediaScannerConnection;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.content.Intent;
+
+import am.util.ftpserver.*;
+import org.apache.ftpserver.*;
+import org.apache.ftpserver.ftplet.FtpException;
 
 public class MainActivity extends Activity {
 
@@ -26,9 +31,10 @@ public class MainActivity extends Activity {
 
     private MyCameraManager cameraManager;
 
+    private String FtpRootDir;
+
     void setupLogToFile() {
-        File logFile = new File(this.getExternalFilesDir(null) +
-                "/PeopleWatcherLog.txt");
+        File logFile = new File(FtpRootDir + "/PeopleWatcherLog.txt");
 
         Log.i(REPORT_TAG, "Logging to " + logFile.getAbsolutePath());
 
@@ -40,7 +46,7 @@ public class MainActivity extends Activity {
 
             // Runtime.getRuntime().exec("logcat -G 64KB");
             Runtime.getRuntime().exec("logcat -c");
-            Runtime.getRuntime().exec("logcat ImageReader_JNI:S -f " + logFile.getAbsolutePath());
+            Runtime.getRuntime().exec("logcat ImageReader_JNI:S *:* -f " + logFile.getAbsolutePath());
         } catch (IOException e) {
             throw new Error("Couldn't setup log to file");
         }
@@ -53,7 +59,7 @@ public class MainActivity extends Activity {
         if (powerManager == null)
             throw new Error("Couldn't get power manager");
 
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyWakelockTag");
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "peoplewatcher:mywakelock");
         wakeLock.acquire();
     }
 
@@ -63,15 +69,47 @@ public class MainActivity extends Activity {
         startService(service);
     }
 
+    void setupFTPServer() {
+
+        new Thread() {
+
+            @Override
+            public void run() {
+                final int port = 9436;
+                final String home = FtpRootDir;
+                FtpServer server = FTPHelper.createServer(port, 10, 5000, true, home);
+
+                try {
+                    server.start();
+                } catch (FtpException e) {
+
+                    throw new Error("FTP error: " + e.getMessage());
+                }
+            }
+        }.start();
+    }
+
+    String createRecordsDir() {
+        File recordsDir = new File(FtpRootDir + "/Records");
+        if (!recordsDir.exists())
+            recordsDir.mkdirs();
+
+        return recordsDir.getAbsolutePath();
+    }
+
     void startup() {
 
-        EngineManager.initializeEngine();
+        FtpRootDir = this.getExternalFilesDir(null).getAbsolutePath();
+
+        EngineManager.initializeEngine(createRecordsDir());
 
         setupLogToFile();
 
         startSimpleForegroundService();
 
         preventCPUTurnOff();
+
+        setupFTPServer();
 
         cameraManager = new MyCameraManager(this);
 
@@ -114,12 +152,12 @@ public class MainActivity extends Activity {
 
     private File getReportsDir() {
 
-        return new File(Environment.getExternalStorageDirectory(), "Reports");
+        return new File(FtpRootDir, "Reports");
     }
 
     private File getReportFile() {
 
-        return new File(getReportsDir(), "PeopleWatcherReport.txt");
+        return new File(getReportsDir(), "Report.txt");
     }
 
     private void setupExceptionHandler() {

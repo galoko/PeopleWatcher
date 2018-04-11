@@ -62,5 +62,4 @@ target_link_libraries(engine
                       ${PREBUILT_DIR}/lib/liblibprotobuf.a
                       ${PREBUILT_DIR}/lib/libx264.a
                       ${PREBUILT_DIR}/lib/libopenh264.a
-                      stdc++
                       )

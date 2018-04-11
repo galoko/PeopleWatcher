@@ -1,6 +1,9 @@
 apply plugin: 'com.android.application'
 
 android {
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+    }
     signingConfigs {
         config {
             keyAlias 'key0'
@@ -60,4 +63,5 @@ dependencies {
     implementation 'com.android.support:support-v13:27.1.1'
     implementation 'com.android.support:cardview-v7:27.1.1'
     implementation 'com.android.support:appcompat-v7:27.1.1'
+    implementation 'am.util:ftpserver:1.1.1.3'
 }

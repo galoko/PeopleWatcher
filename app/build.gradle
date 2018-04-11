@@ -21,7 +21,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-fexceptions"
-                arguments "-DANDROID_PLATFORM=android-23", "-DANDROID_TOOLCHAIN=clang", "-DANDROID_STL=c++_shared"
+                arguments "-DANDROID_PLATFORM=android-23", "-DANDROID_TOOLCHAIN=clang", "-DANDROID_STL=gnustl_shared"
             }
         }
         ndk {

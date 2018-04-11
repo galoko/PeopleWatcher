@@ -38,7 +38,6 @@ target_link_libraries(engine
                       mediandk
                       log
                       z
-                      stdc++
                       ${PREBUILT_DIR}/lib/libswscale.a
                       ${PREBUILT_DIR}/lib/libavfilter.a
                       ${PREBUILT_DIR}/lib/libavformat.a
@@ -63,4 +62,5 @@ target_link_libraries(engine
                       ${PREBUILT_DIR}/lib/liblibprotobuf.a
                       ${PREBUILT_DIR}/lib/libx264.a
                       ${PREBUILT_DIR}/lib/libopenh264.a
+                      stdc++
                       )

@@ -23,8 +23,12 @@ private:
 
     int initialized;
 
-    static void motionDetectorCallback(AVFrame *yuvFrame);
-    void motionDetected(AVFrame* yuvFrame);
+    long long lastMotionRealtimeTimestamp;
+
+    void restartRecordIfFramesTooFarApart(long long realtimeTimestamp);
+
+    static void motionDetectorCallback(AVFrame *yuvFrame, long long realtimeTimestamp);
+    void motionDetected(AVFrame* yuvFrame, long long realtimeTimestamp);
 public:
     // all these methods should be called from single thread
 

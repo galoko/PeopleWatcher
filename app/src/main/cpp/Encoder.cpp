@@ -1,5 +1,7 @@
 #include "Encoder.h"
 
+#include <sys/stat.h>
+
 #include "log.h"
 #include "exceptionUtils.h"
 
@@ -84,11 +86,48 @@ void Encoder::terminate(void) {
 // start/close implementations
 // TODO make real name for records. name could consist of something like current date plus flags
 
+inline bool is_file_exists(const std::string& name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+}
+
+std::string Encoder::getFilePathForRecord(void) {
+
+    std::time_t now = std::time(nullptr);
+    tm* local_now = std::localtime(&now);
+
+    char time_str[512];
+    strftime(time_str, 512, "%d %B %G (%A)", local_now);
+
+    std::string fileName = std::string(time_str);
+
+    std::string filePath;
+
+    int fileNum = 1;
+    while (true) {
+
+        char filePathBuffer[512];
+        if (fileNum > 1)
+            sprintf(filePathBuffer, "%s/%s (%d).flv", rootDir.c_str(), fileName.c_str(), fileNum);
+        else
+            sprintf(filePathBuffer, "%s/%s.flv", rootDir.c_str(), fileName.c_str());
+
+        filePath = std::string(filePathBuffer);
+
+        if (!is_file_exists(filePath))
+            break;
+
+        fileNum++;
+    }
+
+    return filePath;
+}
+
 void Encoder::startEncoding(void) {
 
-    encoder.startRecord(Record, x264, WIDTH, HEIGHT,
-                        (this->rootDir + "/record.flv").c_str(),
-                        encoder_callback);
+    std::string filePath = getFilePathForRecord();
+
+    encoder.startRecord(Record, x264, WIDTH, HEIGHT, filePath.c_str(), encoder_callback);
 }
 
 void Encoder::stopEncoding(void) {
@@ -114,16 +153,6 @@ void Encoder::threadLoop(void) {
         EncoderOperation operation;
 
         this->pendingOperations.wait_dequeue(operation);
-
-        /*
-        if (operation.operationType == EncodeFrame) {
-            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "EncodeFrame operation recved");
-        } else if (operation.operationType == CloseRecord) {
-            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "CloseRecord operation recved");
-        } else if (operation.operationType == FinalizeEncoder) {
-            print_log(ANDROID_LOG_INFO, ENCODER_TAG, "FinalizeEncoder operation recved");
-        }
-         */
 
         if (operation.operationType == StartRecord) {
 

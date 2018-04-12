@@ -50,6 +50,8 @@ private:
     static void* thread_entrypoint(void* opaque);
     void threadLoop(void);
 
+    std::string getFilePathForRecord(void);
+
     void startEncoding(void);
     void stopEncoding(void);
 

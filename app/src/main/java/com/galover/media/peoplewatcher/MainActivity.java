@@ -3,7 +3,6 @@ package com.galover.media.peoplewatcher;
 import android.Manifest;
 import android.app.Activity;
 import android.os.Bundle;
-import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.content.pm.PackageManager;
 import android.util.Log;
@@ -18,8 +17,12 @@ import am.util.ftpserver.*;
 import org.apache.ftpserver.*;
 import org.apache.ftpserver.ftplet.FtpException;
 
+import android.net.wifi.WifiManager;
+import android.net.wifi.WifiManager.WifiLock;
+
 public class MainActivity extends Activity {
 
+    private static final String MAIN_TAG = "PW_MAIN";
     private static final String REPORT_TAG = "PW_REPORT";
 
     // Used to load the 'native-lib' library on application startup.
@@ -69,6 +72,28 @@ public class MainActivity extends Activity {
         startService(service);
     }
 
+    private WifiLock wifiLock;
+
+    public void preventWiFiTurnOff() {
+
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+
+        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "peoplewatcher:wifilock");
+        wifiLock.acquire();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Log.d(MAIN_TAG, "Activity started");
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Log.d(MAIN_TAG, "Activity stopped");
+    }
+
     void setupFTPServer() {
 
         new Thread() {
@@ -108,6 +133,7 @@ public class MainActivity extends Activity {
         startSimpleForegroundService();
 
         preventCPUTurnOff();
+        preventWiFiTurnOff();
 
         setupFTPServer();
 

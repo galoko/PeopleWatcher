@@ -16,6 +16,8 @@ extern "C" {
 
 #define ENGINE_TAG "PW_ENGINE"
 
+#define RECORD_SPLIT_TIME (6 * 60 * 60 * 1000 * 1000 * 1000) // 6 hours
+
 using namespace cv;
 
 Engine::Engine(void) {
@@ -56,8 +58,28 @@ void Engine::stopRecord(void) {
     Encoder::getInstance().stopRecord();
 }
 
+void Engine::restartRecordIfFramesTooFarApart(long long realtimeTimestamp) {
+
+    if (lastMotionRealtimeTimestamp != 0) {
+
+        long long elapsed = realtimeTimestamp - lastMotionRealtimeTimestamp;
+
+        if (elapsed >= RECORD_SPLIT_TIME) {
+
+            print_log(ANDROID_LOG_INFO, ENGINE_TAG, "restarting record");
+
+            lastMotionRealtimeTimestamp = 0;
+
+            stopRecord();
+            startRecord();
+        }
+    }
+}
+
 void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                        int strideY, int strideU, int strideV, long long timestamp) {
+
+    restartRecordIfFramesTooFarApart(timestamp);
 
     if (MotionDetector::getInstance().canAcceptFrame()) {
 
@@ -76,12 +98,14 @@ void Engine::sendFrame(uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
     }
 }
 
-void Engine::motionDetected(AVFrame* yuvFrame) {
+void Engine::motionDetected(AVFrame* yuvFrame, long long realtimeTimestamp) {
+
+    lastMotionRealtimeTimestamp = realtimeTimestamp;
 
     Encoder::getInstance().sendFrame(yuvFrame);
 }
 
-void Engine::motionDetectorCallback(AVFrame *yuvFrame) {
+void Engine::motionDetectorCallback(AVFrame *yuvFrame, long long realtimeTimestamp) {
     
-    Engine::getInstance().motionDetected(yuvFrame);
+    Engine::getInstance().motionDetected(yuvFrame, realtimeTimestamp);
 }

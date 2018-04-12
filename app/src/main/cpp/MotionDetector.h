@@ -21,7 +21,7 @@ extern "C" {
 
 using namespace moodycamel;
 
-typedef void (*MotionDetectorCallback)(AVFrame* yuvFrameWithMotion);
+typedef void (*MotionDetectorCallback)(AVFrame* yuvFrameWithMotion, long long realtimeTimestamp);
 
 class MotionDetector {
 public:

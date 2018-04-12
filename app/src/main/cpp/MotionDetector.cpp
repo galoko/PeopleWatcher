@@ -14,6 +14,7 @@ extern "C" {
 #define THREADS_IN_THREAD_POOL 3
 
 MotionDetector::MotionDetector(void) : pendingOperations(FRAME_BUFFER_SIZE,
+                                                         // one for Java frames send thread
                                                          1 + THREADS_IN_THREAD_POOL,
                                                          1 + THREADS_IN_THREAD_POOL) {
 }
@@ -252,9 +253,12 @@ void MotionDetector::processFrame(AVFrame *frame, bool haveMotion) {
                 bufferedFrames.pop();
 
                 if (frameHaveMotion && callback != NULL) {
+
+                    long long realTimeTimestamp = latestFrame->pts;
                     correctTimestamp(latestFrame);
+
                     print_log(ANDROID_LOG_DEBUG, MOTION_DETECTOR_TAG, "frame with motion send to callback");
-                    callback(latestFrame);
+                    callback(latestFrame, realTimeTimestamp);
                 }
                 else
                     av_frame_free(&latestFrame);

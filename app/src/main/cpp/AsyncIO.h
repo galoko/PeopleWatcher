@@ -47,7 +47,7 @@ private:
 
     void allocateBuffers(void);
 public:
-    static const int IO_BUFFER_SIZE = 4096;
+    static const int IO_BUFFER_SIZE = 0x8000;
 
     void initialize(void);
 

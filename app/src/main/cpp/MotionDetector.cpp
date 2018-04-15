@@ -375,7 +375,7 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
     bool haveMovement = false;
 
     uint8_t luminance = getGrayscaleMeanLuminace(frame);
-    if (luminance > 70) {
+    if (luminance > 100) {
 
         Mat img(frame->height, frame->width, CV_8UC1, frame->data[0],
                 (size_t) frame->linesize[0]);
@@ -384,18 +384,18 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
 
         Mat flow;
 
-        img.convertTo(img, -1, 0.5, 0.0);
-        nextImg.convertTo(nextImg, -1, 0.5, 0.0);
+        img.convertTo(img, -1, 0.75, 0.0);
+        nextImg.convertTo(nextImg, -1, 0.75, 0.0);
 
         GaussianBlur(img, img, Size(21, 21), 0.0);
         GaussianBlur(nextImg, nextImg, Size(21, 21), 0.0);
 
-        calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 10, 1, 7, 1.2, 0);
+        calcOpticalFlowFarneback(img, nextImg, flow, 0.5, 1, 25, 1, 5, 1.1, 0);
 
         Mat flowImg;
-        convertFlowToImage(&flow, &flowImg, 0.6);
+        convertFlowToImage(&flow, &flowImg, 0.1);
 
-        dilate(flowImg, flowImg, Mat(), Point(-1, -1), 3);
+        // dilate(flowImg, flowImg, Mat(), Point(-1, -1), 3);
 
         std::vector<std::vector<Point>> contours;
         findContours(flowImg, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
@@ -403,7 +403,7 @@ bool MotionDetector::detectMotion(AVFrame *frame, AVFrame *nextFrame) {
         // loop over the contours
         for (std::vector<Point> contour : contours) {
 
-            if (contourArea(contour) >= 10 * 20) {
+            if (contourArea(contour) >= 20 * 20) {
                 haveMovement = true;
                 break;
             }

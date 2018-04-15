@@ -7,7 +7,7 @@
 
 #define ASYNC_IO_TAG "PW_ASYNC_IO"
 
-#define IO_BUFFERS_COUNT 256
+#define IO_BUFFERS_COUNT (0x100000 / IO_BUFFER_SIZE)
 
 AsyncIO::AsyncIO(void) :
     pendingOperations(IO_BUFFERS_COUNT * 2),
@@ -66,6 +66,8 @@ void AsyncIO::threadLoop(void) {
             size_t ret = fwrite(operation.buffer, 1, operation.size, operation.file);
             if (ret != operation.size)
                 throw new std::runtime_error("Async IO write failed");
+
+            fflush(operation.file);
 
             print_log(ANDROID_LOG_DEBUG, ASYNC_IO_TAG, "written: %d", ret);
 

@@ -1,6 +1,7 @@
 #include "Encoder.h"
 
 #include <sys/stat.h>
+#include <dirent.h>
 
 #include "log.h"
 #include "exceptionUtils.h"
@@ -21,6 +22,8 @@ void Encoder::initialize(const char *rootDir) {
 
     this->rootDir = std::string(rootDir);
 
+    removeAllInUseFlags();
+
     setup_ffmpeg_log();
 
     avfilter_register_all();
@@ -28,6 +31,19 @@ void Encoder::initialize(const char *rootDir) {
     pthread_check_error(pthread_create(&thread, NULL, thread_entrypoint, NULL));
 
     this->initialized = 1;
+}
+
+void Encoder::removeAllInUseFlags(void) {
+
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir(rootDir.c_str())) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            if (ent->d_type == DT_REG)
+                removeInUseFlag(rootDir + "/" + ent->d_name);
+        }
+        closedir(dir);
+    }
 }
 
 // async API, they send commands to the encoder thread
@@ -83,12 +99,9 @@ void Encoder::terminate(void) {
     pthread_check_error(pthread_join(thread, NULL));
 }
 
-// start/close implementations
-// TODO make real name for records. name could consist of something like current date plus flags
-
 inline bool is_file_exists(const std::string& name) {
     struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
+    return (stat(name.c_str(), &buffer) == 0);
 }
 
 std::string Encoder::getFilePathForRecord(void) {
@@ -107,15 +120,25 @@ std::string Encoder::getFilePathForRecord(void) {
     while (true) {
 
         char filePathBuffer[512];
+        bool isNormalFilePresent, isInUseFilePresent;
+
         if (fileNum > 1)
             sprintf(filePathBuffer, "%s/%s (%d).flv", rootDir.c_str(), fileName.c_str(), fileNum);
         else
             sprintf(filePathBuffer, "%s/%s.flv", rootDir.c_str(), fileName.c_str());
+        isNormalFilePresent = is_file_exists(filePathBuffer);
 
-        filePath = std::string(filePathBuffer);
+        if (fileNum > 1)
+            sprintf(filePathBuffer, "%s/%s (%d) (in use).flv", rootDir.c_str(), fileName.c_str(), fileNum);
+        else
+            sprintf(filePathBuffer, "%s/%s (in use).flv", rootDir.c_str(), fileName.c_str());
+        isInUseFilePresent = is_file_exists(filePathBuffer);
 
-        if (!is_file_exists(filePath))
+        if (!isNormalFilePresent && !isInUseFilePresent) {
+
+            filePath = std::string(filePathBuffer);
             break;
+        }
 
         fileNum++;
     }
@@ -123,16 +146,54 @@ std::string Encoder::getFilePathForRecord(void) {
     return filePath;
 }
 
+bool hasEnding (std::string const &fullString, std::string const &ending) {
+    if (fullString.length() >= ending.length()) {
+        return (0 ==
+                fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+    } else {
+        return false;
+    }
+}
+
+std::string Encoder::removeInUseFlagFromFilePath(std::string filePath) {
+
+    std::string postfix = " (in use).flv";
+
+    if (!hasEnding(filePath, postfix))
+        return filePath;
+
+    std::string result = filePath.substr(0, filePath.length() - postfix.length()) + ".flv";
+    return result;
+}
+
+bool Encoder::removeInUseFlag(std::string filePath) {
+
+    print_log(ANDROID_LOG_DEBUG, ENCODER_TAG, "Removing in use flag for %s", filePath.c_str());
+
+    std::string newFilePath = removeInUseFlagFromFilePath(filePath);
+    if (newFilePath == filePath)
+        return false;
+
+    print_log(ANDROID_LOG_DEBUG, ENCODER_TAG, "renaming %s -> %s", filePath.c_str(), newFilePath.c_str());
+    rename(filePath.c_str(), newFilePath.c_str());
+    return true;
+}
+
 void Encoder::startEncoding(void) {
 
-    std::string filePath = getFilePathForRecord();
+    currentRecordFilePath = getFilePathForRecord();
 
-    encoder.startRecord(Record, x264, WIDTH, HEIGHT, filePath.c_str(), encoder_callback);
+    encoder.startRecord(Record, x264, WIDTH, HEIGHT, currentRecordFilePath.c_str(), encoder_callback);
 }
 
 void Encoder::stopEncoding(void) {
 
     encoder.closeRecord();
+
+    my_assert(!currentRecordFilePath.empty());
+    if (!removeInUseFlag(currentRecordFilePath))
+        throw new std::runtime_error("Couldn't remove in use flag from current record");
+    currentRecordFilePath = "";
 }
 
 // thread

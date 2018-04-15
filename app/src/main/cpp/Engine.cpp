@@ -16,8 +16,6 @@ extern "C" {
 
 #define ENGINE_TAG "PW_ENGINE"
 
-#define RECORD_SPLIT_TIME (6 * 60 * 60 * 1000 * 1000 * 1000) // 6 hours
-
 using namespace cv;
 
 Engine::Engine(void) {
@@ -62,6 +60,7 @@ void Engine::restartRecordIfFramesTooFarApart(long long realtimeTimestamp) {
 
     if (lastMotionRealtimeTimestamp != 0) {
 
+        long long RECORD_SPLIT_TIME = (long long) 6 * 60 * 60 * 1000 * 1000 * 1000;
         long long elapsed = realtimeTimestamp - lastMotionRealtimeTimestamp;
 
         if (elapsed >= RECORD_SPLIT_TIME) {

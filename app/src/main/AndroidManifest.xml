@@ -26,7 +26,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:enabled="true" android:name="com.galover.media.peoplewatcher.SimpleService" />
+        <receiver android:name="com.galover.media.peoplewatcher.MyWakefulReceiver"></receiver>
+        <service
+            android:name="com.galover.media.peoplewatcher.MainService"
+            android:enabled="true" >
+        </service>
     </application>
 
 </manifest>

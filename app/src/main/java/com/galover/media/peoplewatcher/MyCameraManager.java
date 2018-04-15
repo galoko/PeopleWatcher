@@ -29,7 +29,7 @@ final class MyCameraManager  {
     static final int WIDTH  = 640;
     static final int HEIGHT = 480;
 
-    private MainActivity context;
+    private Context context;
     private CameraManager manager;
     private CameraDevice camera;
     private ImageReader frame;
@@ -37,9 +37,9 @@ final class MyCameraManager  {
     private CameraCaptureSession session;
     private long startTime;
 
-    MyCameraManager(MainActivity activity) {
+    MyCameraManager(Context ctx) {
 
-        context = activity;
+        context = ctx;
         frame = ImageReader.newInstance(WIDTH, HEIGHT, ImageFormat.YUV_420_888, 10);
         frameSurface = frame.getSurface();
         manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
@@ -107,25 +107,6 @@ final class MyCameraManager  {
 
                 image.close();
             }
-
-            if (frameTime > 24 * 60 * 60) {
-
-                Log.i(CAMERA_TAG, "stopping");
-
-                EngineManager.stopRecord();
-
-                Log.i(CAMERA_TAG, "finalizing");
-
-                EngineManager.finalizeEngine();
-
-                Log.i(CAMERA_TAG, "finalized");
-
-                context.finishAndRemoveTask();
-
-                Log.i(CAMERA_TAG, "finished");
-
-                System.exit(0);
-            }
         }
 
         @Override
@@ -155,64 +136,6 @@ final class MyCameraManager  {
         }
     }
 
-    private static RggbChannelVector getTemperatureVector(int WhiteBalanceValue){
-
-        float InsertTemperature = WhiteBalanceValue;
-        float temperature = InsertTemperature / 100;
-        float red;
-        float green;
-        float blue;
-
-        //Calculate red
-
-        if (temperature <= 66)
-            red = 255;
-        else {
-            red = temperature - 60;
-            red = (float) (329.698727446 * (Math.pow((double) red, -0.1332047592)));
-            if (red < 0)
-                red = 0;
-            if (red > 255)
-                red = 255;
-        }
-
-
-        //Calculate green
-        if (temperature <= 66) {
-            green = temperature;
-            green = (float) (99.4708025861 * Math.log(green) - 161.1195681661);
-            if (green < 0)
-                green = 0;
-            if (green > 255)
-                green = 255;
-        } else
-            green = temperature - 60;
-        green = (float) (288.1221695283 * (Math.pow((double) red, -0.0755148492)));
-        if (green < 0)
-            green = 0;
-        if (green > 255)
-            green = 255;
-
-
-        //calculate blue
-        if (temperature >= 66)
-            blue = 255;
-        else if (temperature <= 19)
-            blue = 0;
-        else {
-            blue = temperature - 10;
-            blue = (float) (138.5177312231 * Math.log(blue) - 305.0447927307);
-            if (blue < 0)
-                blue = 0;
-            if (blue > 255)
-                blue = 255;
-        }
-        RggbChannelVector finalTemperatureValue = new RggbChannelVector(red/255,(green/255)/2,(green/255)/2,blue/255);
-        return finalTemperatureValue;
-    }
-
-    private static int[] 				colorTransformMatrix 		= new int[]{258, 128, -119, 128, -10, 128, -40, 128, 209, 128, -41, 128, -1, 128, -74, 128, 203, 128};
-
     private void startRecordFrames() {
 
         List<Surface> surfaces = new ArrayList<>();
@@ -236,7 +159,12 @@ final class MyCameraManager  {
                         CaptureRequest.Builder builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
 
                         builder.addTarget(frameSurface);
+
                         builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+
+                        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
+                        builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT);
 
                         session.setRepeatingRequest(builder.build(), new MyCaptureCallback(), null);
                     } catch (CameraAccessException e) {
@@ -272,6 +200,20 @@ final class MyCameraManager  {
                     if (map == null) {
                         continue;
                     }
+
+                    boolean Support = false;
+                    int [] values2 = characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES);
+                    for(int value2 : values2) {
+                            if( value2 == CameraMetadata.CONTROL_AWB_MODE_OFF ) {
+                                Support = true;
+                                break;
+                            };
+                        }
+
+                    if (Support)
+                        Log.i(CAMERA_TAG, "Camera does support manual whitebalance");
+                    else
+                        Log.i(CAMERA_TAG, "Camera doesn't support manual whitebalance");
 
                     manager.openCamera(cameraId, stateCallback, null);
 

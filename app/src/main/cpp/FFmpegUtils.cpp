@@ -399,7 +399,10 @@ void FFmpegEncoder::writePacket(AVPacket *packet) {
     if (ret < 0) {
         av_packet_unref(packet);
         av_check_error(ret);
+        return;
     }
+
+    avio_flush(format_ctx->pb);
 }
 
 void FFmpegEncoder::closeRecord(void) {

@@ -42,6 +42,7 @@ private:
     BlockingConcurrentQueue<EncoderOperation> pendingOperations;
 
     FFmpegEncoder encoder;
+    std::string currentRecordFilePath;
     FILE *io_file;
     void* io_buffer;
 
@@ -51,6 +52,9 @@ private:
     void threadLoop(void);
 
     std::string getFilePathForRecord(void);
+    std::string removeInUseFlagFromFilePath(std::string filePath);
+    bool removeInUseFlag(std::string filePath);
+    void removeAllInUseFlags(void);
 
     void startEncoding(void);
     void stopEncoding(void);
